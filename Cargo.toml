@@ -7,10 +7,8 @@ readme = "README.md"
 keywords = ["process", "pipe", "async", "tokio"]
 repository = "https://github.com/m-lima/powner"
 categories = ["asynchronous", "concurrency"]
-description = """
-A wrapper around child processes providing facilities for
-sync and async read and write
-"""
+description = "A wrapper around child processes providing facilities for sync and async read and write"
+license-file = "LICENSE"
 
 [features]
 default = []
