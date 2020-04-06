@@ -5,7 +5,7 @@ pub enum ReadSource {
     Both,
 }
 
-pub struct Process(Option<ProcessIpml>, ReadSource);
+pub struct Process(Option<ProcessImpl>, ReadSource);
 
 impl crate::PipedSpawner for tokio::process::Command {
     type Output = Process;
@@ -22,14 +22,21 @@ impl crate::PipedSpawner for tokio::process::Command {
         let stderr = process.stderr.take().unwrap();
 
         Ok(Process(
-            Some(ProcessIpml {
+            Some(ProcessImpl {
                 process,
                 stdin,
                 stdout,
                 stderr,
             }),
-            ReadSource::Stdout,
+            ReadSource::Both,
         ))
+    }
+}
+
+impl std::ops::Drop for Process {
+    fn drop(&mut self) {
+        let process = self.0.take().unwrap();
+        let _ = process.shutdown();
     }
 }
 
@@ -92,8 +99,10 @@ impl tokio::io::AsyncRead for Process {
                 let stderr =
                     std::pin::Pin::new(&mut self.0.as_mut().unwrap().stderr).poll_read(cx, buf);
                 if stderr.is_ready() {
+                    println!("Got stderr");
                     stderr
                 } else {
+                    println!("Trying stdout");
                     std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdout).poll_read(cx, buf)
                 }
             }
@@ -101,21 +110,14 @@ impl tokio::io::AsyncRead for Process {
     }
 }
 
-impl std::ops::Drop for Process {
-    fn drop(&mut self) {
-        let process = self.0.take().unwrap();
-        let _ = process.shutdown();
-    }
-}
-
-struct ProcessIpml {
+struct ProcessImpl {
     process: tokio::process::Child,
     stdin: tokio::process::ChildStdin,
     stdout: tokio::process::ChildStdout,
     stderr: tokio::process::ChildStderr,
 }
 
-impl ProcessIpml {
+impl ProcessImpl {
     // Allowed because we are already assuming *nix
     #[allow(clippy::cast_possible_wrap)]
     #[cfg(unix)]

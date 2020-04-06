@@ -13,7 +13,7 @@ sync and async read and write
 """
 
 [features]
-default = [ "async" ]
+default = []
 async = [ "tokio" ]
 
 [dependencies]

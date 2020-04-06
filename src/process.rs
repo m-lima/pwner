@@ -4,7 +4,7 @@ pub enum ReadSource {
     Stderr,
 }
 
-pub struct Process(Option<ProcessIpml>, ReadSource);
+pub struct Process(Option<ProcessImpl>, ReadSource);
 
 impl crate::PipedSpawner for std::process::Command {
     type Output = Process;
@@ -21,7 +21,7 @@ impl crate::PipedSpawner for std::process::Command {
         let stderr = process.stderr.take().unwrap();
 
         Ok(Process(
-            Some(ProcessIpml {
+            Some(ProcessImpl {
                 process,
                 stdin,
                 stdout,
@@ -50,6 +50,13 @@ impl Process {
     }
 }
 
+impl std::ops::Drop for Process {
+    fn drop(&mut self) {
+        let process = self.0.take().unwrap();
+        let _ = process.shutdown();
+    }
+}
+
 impl std::io::Write for Process {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.as_mut().unwrap().stdin.write(buf)
@@ -69,21 +76,14 @@ impl std::io::Read for Process {
     }
 }
 
-impl std::ops::Drop for Process {
-    fn drop(&mut self) {
-        let process = self.0.take().unwrap();
-        let _ = process.shutdown();
-    }
-}
-
-struct ProcessIpml {
+struct ProcessImpl {
     process: std::process::Child,
     stdin: std::process::ChildStdin,
     stdout: std::process::ChildStdout,
     stderr: std::process::ChildStderr,
 }
 
-impl ProcessIpml {
+impl ProcessImpl {
     // Allowed because we are already assuming *nix
     #[allow(clippy::cast_possible_wrap)]
     #[cfg(unix)]
