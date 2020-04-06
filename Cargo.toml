@@ -1,7 +1,21 @@
 [package]
 name = "pwner"
+edition = "2018"
 version = "0.1.0"
 authors = ["Marcelo Lima <marcelowind@gmail.com>"]
-edition = "2018"
+readme = "README.md"
+keywords = ["process", "pipe", "async", "tokio"]
+repository = "https://github.com/m-lima/powner"
+categories = ["asynchronous", "concurrency"]
+description = """
+A wrapper around child processes providing facilities for
+sync and async read and write
+"""
 
-[dependencies]
+[features]
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.17" }
+
+# [dependencies.tokio]
+# tokio = { version = "0.2", features = [ "io-std", "io-util", "macros", "process", "rt-core", "sync", "time" ] }
