@@ -93,11 +93,12 @@ impl ProcessIpml {
 
     #[cfg(not(unix))]
     fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
-        self.process.kill()
+        self.process.kill();
+        self.process.wait()
     }
 
     #[cfg(unix)]
-    fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
+    fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
         use std::io::Write;
 
         // Copy pid
@@ -113,35 +114,31 @@ impl ProcessIpml {
 
         if let Ok(status) = self.process.try_wait() {
             if status.is_none() {
+                use nix::sys::{signal, wait};
+                use wait::WaitStatus::Exited;
+
+                let no_hang = Some(wait::WaitPidFlag::WNOHANG);
+
                 // Try SIGINT
-                let _ = nix::sys::signal::kill(pid, nix::sys::signal::SIGINT);
+                signal::kill(pid, signal::SIGINT)?;
 
-                std::thread::spawn(move || {
-                    use nix::sys::{signal, wait};
-                    use wait::WaitStatus::Exited;
-
-                    let no_hang = Some(wait::WaitPidFlag::WNOHANG);
-
-                    std::thread::sleep(std::time::Duration::from_secs(2));
-                    if let Ok(Exited(_, _)) = wait::waitpid(pid, no_hang) {
-                        return;
-                    }
-
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if let Ok(Exited(_, _)) = wait::waitpid(pid, no_hang) {
+                } else {
                     // Try SIGTERM
-                    let _ = signal::kill(pid, signal::SIGTERM);
+                    signal::kill(pid, signal::SIGTERM)?;
 
                     std::thread::sleep(std::time::Duration::from_secs(2));
                     if let Ok(Exited(_, _)) = wait::waitpid(pid, no_hang) {
-                        return;
+                    } else {
+                        // Go for SIGKILL
+                        signal::kill(pid, signal::SIGKILL)?;
                     }
-
-                    // Go for SIGKILL
-                    let _ = signal::kill(pid, signal::SIGKILL);
-                });
+                }
             }
         }
 
         // Block until process is freed
-        self.process.wait()
+        self.process.wait().map_err(crate::UnixIoError::from)
     }
 }

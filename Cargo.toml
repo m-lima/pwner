@@ -13,9 +13,11 @@ sync and async read and write
 """
 
 [features]
+default = [ "async" ]
+async = [ "tokio" ]
+
+[dependencies]
+tokio = { version = "0.2", features = [ "io-std", "io-util", "macros", "process", "rt-core", "sync", "time" ], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.17" }
-
-# [dependencies.tokio]
-# tokio = { version = "0.2", features = [ "io-std", "io-util", "macros", "process", "rt-core", "sync", "time" ] }
