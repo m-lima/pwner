@@ -35,8 +35,7 @@ impl crate::PipedSpawner for tokio::process::Command {
 
 impl std::ops::Drop for Process {
     fn drop(&mut self) {
-        let process = self.0.take().unwrap();
-        let _ = process.shutdown();
+        tokio::spawn(self.0.take().unwrap().shutdown());
     }
 }
 
