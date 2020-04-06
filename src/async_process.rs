@@ -56,6 +56,17 @@ impl Process {
         self.1 = read_source;
         self
     }
+
+    pub fn decompose(
+        &mut self,
+    ) -> (
+        &mut tokio::process::ChildStdin,
+        &mut tokio::process::ChildStdout,
+        &mut tokio::process::ChildStderr,
+    ) {
+        let handle = self.0.as_mut().unwrap();
+        (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
+    }
 }
 
 impl tokio::io::AsyncWrite for Process {

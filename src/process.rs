@@ -48,6 +48,17 @@ impl Process {
         self.1 = read_source;
         self
     }
+
+    pub fn decompose(
+        &mut self,
+    ) -> (
+        &mut std::process::ChildStdin,
+        &mut std::process::ChildStdout,
+        &mut std::process::ChildStderr,
+    ) {
+        let handle = self.0.as_mut().unwrap();
+        (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
+    }
 }
 
 impl std::ops::Drop for Process {
