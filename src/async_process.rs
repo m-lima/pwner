@@ -110,10 +110,8 @@ impl tokio::io::AsyncRead for Process {
                 let stderr =
                     std::pin::Pin::new(&mut self.0.as_mut().unwrap().stderr).poll_read(cx, buf);
                 if stderr.is_ready() {
-                    println!("Got stderr");
                     stderr
                 } else {
-                    println!("Trying stdout");
                     std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdout).poll_read(cx, buf)
                 }
             }
