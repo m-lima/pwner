@@ -19,11 +19,9 @@
 //! use std::process::Command;
 //! use pwner::Spawner;
 //!
-//! let mut child = Command::new("echo").arg("hello").spawn_owned()?;
+//! let mut child = Command::new("ls").spawn_owned()?;
 //! let mut output = String::new();
 //! child.read_to_string(&mut output)?;
-//!
-//! assert_eq!("hello\n", output);
 //! # Ok(())
 //! # }
 //! ```
@@ -277,8 +275,9 @@ mod test {
     fn test_read() {
         use std::io::BufRead;
 
-        let child = std::process::Command::new("echo")
-            .arg("hello")
+        let child = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("echo hello")
             .spawn_owned()
             .unwrap();
         let mut output = String::new();
@@ -304,7 +303,7 @@ mod test {
 
     #[test]
     fn test_drop() {
-        let mut child = std::process::Command::new("echo").spawn_owned().unwrap();
+        let mut child = std::process::Command::new("ls").spawn_owned().unwrap();
         assert!(!child.0.take().unwrap().shutdown().is_ok());
     }
 }

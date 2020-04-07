@@ -22,11 +22,9 @@
 //! use tokio::process::Command;
 //! use pwner::Spawner;
 //!
-//! let mut child = Command::new("echo").arg("hello").spawn_owned()?;
+//! let mut child = Command::new("ls").spawn_owned()?;
 //! let mut output = String::new();
 //! child.read_to_string(&mut output).await?;
-//!
-//! assert_eq!("hello\n", output);
 //! # Ok(())
 //! # }
 //! ```
@@ -345,8 +343,9 @@ mod test {
     async fn test_read() {
         use tokio::io::AsyncReadExt;
 
-        let mut child = tokio::process::Command::new("echo")
-            .arg("hello")
+        let mut child = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg("echo hello")
             .spawn_owned()
             .unwrap();
         let mut output = String::new();
@@ -369,7 +368,7 @@ mod test {
 
     #[tokio::test]
     async fn test_drop_does_not_panic() {
-        let mut child = tokio::process::Command::new("echo").spawn_owned().unwrap();
+        let mut child = tokio::process::Command::new("ls").spawn_owned().unwrap();
         assert!(child.0.take().unwrap().shutdown().await.is_ok());
     }
 }
