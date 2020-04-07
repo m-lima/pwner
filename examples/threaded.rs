@@ -1,4 +1,4 @@
-use pwner::PipedSpawner;
+use pwner::Spawner;
 
 /// A simnple sync example using threads to achieve concurrency
 ///
@@ -8,9 +8,9 @@ use pwner::PipedSpawner;
 /// - write whatever is in the `stdout` of the child process
 /// - write whatever is in the `stderr` of the child process
 fn main() {
-    // Use std::process::Command to create a new piped child
+    // Use std::process::Command to create a new owned child
     let mut child = std::process::Command::new("cat")
-        .spawn_piped()
+        .spawn_owned()
         .expect("Couldn't start the child process");
 
     // Decompose the child into the three pipes

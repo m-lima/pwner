@@ -1,6 +1,63 @@
 #![deny(warnings, clippy::pedantic)]
 #![warn(rust_2018_idioms)]
 
+//! Pwner is a Process Owner crate that allows ergonomic access to child processes.
+//!
+//! This module creates the possibility of owning a child and having convenient methods to
+//! read and write, while also killing the process gracefully upon dropping.
+//!
+//! # Spawning an owned process
+//!
+//! ```no_run
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! ```
+//!
+//! # Reading and writing
+//!
+//! ```no_run
+//! use std::io::{BufRead, BufReader, Write};
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! # fn wrapper() -> std::io::Result<()> {
+//! let mut child = Command::new("cat").spawn_owned()?;
+//! child.write_all(b"hello\n")?;
+//!
+//! let mut output = String::new();
+//! let mut reader = BufReader::new(child);
+//! reader.read_line(&mut output)?;
+//!
+//! assert_eq!("hello\n", output);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Stopping an owned process
+//!
+//! The owned process is terminated whenever it is dropped.
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! {
+//!     let child = Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! }
+//! // child is killed when dropped out of scope
+//! ```
+//!
+//! # Graceful dropping
+//!
+//! **Note:** Only available on *nix platforms.
+//!
+//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
+//! kill it gracefully by sending a `SIGINT`. If the process still doesn't die,
+//! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
 pub mod process;
 #[cfg(feature = "async")]
 pub mod tokio;
@@ -9,7 +66,7 @@ pub mod tokio;
 /// stdout, and stderr.
 ///
 /// The handle also implements a clean shutdown of the process upon destruction.
-pub trait PipedSpawner {
+pub trait Spawner {
     type Output: Process;
 
     /// Executes the command as a child process, returning a handle to it.
@@ -22,10 +79,10 @@ pub trait PipedSpawner {
     ///
     /// ```no_run
     /// use std::process::Command;
-    /// use pwner::PipedSpawner;
+    /// use pwner::Spawner;
     ///
     /// Command::new("ls")
-    ///         .spawn_piped()
+    ///         .spawn_owned()
     ///         .expect("ls command failed to start");
     /// ```
     ///
@@ -34,9 +91,12 @@ pub trait PipedSpawner {
     /// * [`std::io::Error`] if failure when spawning
     ///
     /// [`std::io::Error`]: std::io::Error
-    fn spawn_piped(&mut self) -> std::io::Result<Self::Output>;
+    fn spawn_owned(&mut self) -> std::io::Result<Self::Output>;
 }
 
+/// The trait returned by [`PipedSpwner::spawn_owned()`](trait.PipedSpawner.html#tymethod.spawn_owned).
+///
+/// All implementations of [`PipedSpawner`] return a concrete instance capable of read/write.
 pub trait Process: std::ops::Drop {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
@@ -46,10 +106,10 @@ pub trait Process: std::ops::Drop {
     ///
     /// ```no_run
     /// use std::process::Command;
-    /// use pwner::{ PipedSpawner, Process };
+    /// use pwner::{ Spawner, Process };
     ///
     /// let mut command = Command::new("ls");
-    /// if let Ok(child) = command.spawn_piped() {
+    /// if let Ok(child) = command.spawn_owned() {
     ///     println!("Child's ID is {}", child.id());
     /// } else {
     ///     println!("ls command didn't start");

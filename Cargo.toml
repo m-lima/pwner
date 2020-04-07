@@ -7,7 +7,7 @@ readme = "README.md"
 keywords = ["process", "pipe", "async", "tokio"]
 repository = "https://github.com/m-lima/powner"
 categories = ["asynchronous", "concurrency"]
-description = "A wrapper around child processes providing facilities for sync and async read and write"
+description = "Pwner is a Process Owner crate that allows ergonomic access to child processes"
 license-file = "LICENSE"
 
 [features]

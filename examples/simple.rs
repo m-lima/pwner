@@ -1,4 +1,4 @@
-use pwner::PipedSpawner;
+use pwner::Spawner;
 use std::io::{Read, Write};
 
 /// A simnple ping-pong example using `cat`
@@ -6,9 +6,9 @@ use std::io::{Read, Write};
 /// Using the synchronous interface, write a some bytes, then read some some bytes
 /// from `stdin` until `EOF` (CTRL + D) is reached
 fn main() {
-    // Use std::process::Command to create a new piped child
+    // Use std::process::Command to create a new owned child
     let mut child = std::process::Command::new("cat")
-        .spawn_piped()
+        .spawn_owned()
         .expect("Couldn't start the child process");
 
     // Prepare a 1kb buffer

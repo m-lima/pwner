@@ -1,4 +1,4 @@
-use pwner::PipedSpawner;
+use pwner::Spawner;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// A simnple async example using `cat` and tokio's single threaded executor
@@ -10,9 +10,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// - write whatever is in the `stderr` of the child process
 #[tokio::main(basic_scheduler)]
 async fn main() {
-    // Use tokio::process::Command to create a new piped child
+    // Use tokio::process::Command to create a new owned child
     let mut child = tokio::process::Command::new("cat")
-        .spawn_piped()
+        .spawn_owned()
         .expect("Couldn't start the child process");
 
     // Decompose the child into the three pipes

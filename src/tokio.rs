@@ -1,3 +1,87 @@
+#![allow(clippy::needless_doctest_main)]
+
+//! This module holds the tokio implementation of an async process.
+//!
+//! All potentially blocking interactions are performed async, including the dropping
+//! of child processes (on *nix platforms).
+//!
+//! # Spawning an owned tokio process
+//!
+//! ```no_run
+//! use tokio::process::Command;
+//! use pwner::Spawner;
+//!
+//! Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! ```
+//!
+//! # Reading from the process
+//!
+//! ```no_run
+//! # async fn wrapper() -> Result<(), Box<dyn std::error::Error>> {
+//! use tokio::io::AsyncReadExt;
+//! use tokio::process::Command;
+//! use pwner::Spawner;
+//!
+//! let mut child = Command::new("echo").arg("hello").spawn_owned()?;
+//! let mut output = String::new();
+//! child.read_to_string(&mut output).await?;
+//!
+//! assert_eq!("hello\n", output);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Writing to the process
+//!
+//! ```no_run
+//! # async fn wrapper() -> Result<(), Box<dyn std::error::Error>> {
+//! use tokio::io::{AsyncReadExt, AsyncWriteExt};
+//! use tokio::process::Command;
+//! use pwner::Spawner;
+//!
+//! let mut child = Command::new("cat").spawn_owned()?;
+//! child.write_all(b"hello\n").await?;
+//!
+//! let mut buffer = [0_u8; 10];
+//! child.read(&mut buffer).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Graceful dropping
+//!
+//! **Note:** Only available on *nix platforms.
+//!
+//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
+//! kill it gracefully by sending a `SIGINT` and asynchronously wait for the process to die for 2
+//! seconds. If the process still doesn't die, a `SIGTERM` is sent and another chance is given,
+//! until finally a `SIGKILL` is sent.
+//!
+//! ## Panics
+//!
+//! If the process is dropped without a tokio runtime, a panic will occur.
+//!
+//! ```should_panic
+//! use tokio::process::Command;
+//! use pwner::Spawner;
+//!
+//! {
+//!     let child = Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! }
+//! ```
+//!
+//! Make sure that a runtime is available to kill the child process
+//!
+//! ```
+//! use tokio::process::Command;
+//! use pwner::Spawner;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     let child = Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! }
+//! ```
+
 /// Possible sources to read from
 #[derive(Debug, Copy, Clone)]
 pub enum ReadSource {
@@ -9,12 +93,23 @@ pub enum ReadSource {
     Both,
 }
 
+/// An implementation of [`Process`](../trait.Process.html) that uses
+/// [`tokio::process`](tokio::process) as the launcher.
+///
+/// All read and write operations are async.
+///
+/// **Note:** On *nix platforms, the owned process will have 2 seconds between signals, which is
+/// run in a spawned task.
+///
+/// # Panics
+///
+/// When, on *nix platforms, a process gets dropped without a runtime.
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl crate::PipedSpawner for tokio::process::Command {
+impl crate::Spawner for tokio::process::Command {
     type Output = Process;
 
-    fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
+    fn spawn_owned(&mut self) -> std::io::Result<Self::Output> {
         let mut process = self
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -46,10 +141,10 @@ impl super::Process for Process {
     ///
     /// ```no_run
     /// use tokio::process::Command;
-    /// use pwner::{ PipedSpawner, Process };
+    /// use pwner::{ Spawner, Process };
     ///
     /// let mut command = Command::new("ls");
-    /// if let Ok(child) = command.spawn_piped() {
+    /// if let Ok(child) = command.spawn_owned() {
     ///     println!("Child's ID is {}", child.id());
     /// } else {
     ///     println!("ls command didn't start");
@@ -72,10 +167,10 @@ impl Process {
     /// # async {
     /// use tokio::io::AsyncReadExt;
     /// use tokio::process::Command;
-    /// use pwner::PipedSpawner;
+    /// use pwner::Spawner;
     /// use pwner::tokio::ReadSource;
     ///
-    /// let mut child = Command::new("ls").spawn_piped().unwrap();
+    /// let mut child = Command::new("ls").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
     ///
     /// child.read_from(ReadSource::Both).read(&mut buffer).await.unwrap();
@@ -96,9 +191,9 @@ impl Process {
     /// # async {
     /// use tokio::io::{ AsyncReadExt, AsyncWriteExt };
     /// use tokio::process::Command;
-    /// use pwner::PipedSpawner;
+    /// use pwner::Spawner;
     ///
-    /// let mut child = Command::new("cat").spawn_piped().unwrap();
+    /// let mut child = Command::new("cat").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
     /// let (stdin, stdout, _) = child.decompose();
     ///
@@ -244,7 +339,7 @@ impl ProcessImpl {
 
 #[cfg(test)]
 mod test {
-    use crate::PipedSpawner;
+    use crate::Spawner;
 
     #[tokio::test]
     async fn test_read() {
@@ -252,7 +347,7 @@ mod test {
 
         let mut child = tokio::process::Command::new("echo")
             .arg("hello")
-            .spawn_piped()
+            .spawn_owned()
             .unwrap();
         let mut output = String::new();
         assert!(child.read_to_string(&mut output).await.is_ok());
@@ -264,7 +359,7 @@ mod test {
     async fn test_write() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-        let mut child = tokio::process::Command::new("cat").spawn_piped().unwrap();
+        let mut child = tokio::process::Command::new("cat").spawn_owned().unwrap();
         assert!(child.write_all(b"hello\n").await.is_ok());
 
         let mut buffer = [0_u8; 10];
@@ -276,8 +371,8 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_drop() {
-        let mut child = tokio::process::Command::new("echo").spawn_piped().unwrap();
+    async fn test_drop_does_not_panic() {
+        let mut child = tokio::process::Command::new("echo").spawn_owned().unwrap();
         assert!(child.0.take().unwrap().shutdown().await.is_ok());
     }
 }

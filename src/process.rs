@@ -1,3 +1,59 @@
+//! This module holds the std implementation of a process.
+//!
+//! All interactions are blocking, including the dropping of child processes (on *nix platforms).
+//!
+//! # Spawning an owned tokio process
+//!
+//! ```no_run
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! Command::new("ls").spawn_owned().expect("ls command failed to start");
+//! ```
+//!
+//! # Reading from the process
+//!
+//! ```no_run
+//! # fn wrapper() -> Result<(), Box<dyn std::error::Error>> {
+//! use std::io::Read;
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! let mut child = Command::new("echo").arg("hello").spawn_owned()?;
+//! let mut output = String::new();
+//! child.read_to_string(&mut output)?;
+//!
+//! assert_eq!("hello\n", output);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Writing to the process
+//!
+//! ```no_run
+//! # fn wrapper() -> Result<(), Box<dyn std::error::Error>> {
+//! use std::io::{Read, Write};
+//! use std::process::Command;
+//! use pwner::Spawner;
+//!
+//! let mut child = Command::new("cat").spawn_owned()?;
+//! child.write_all(b"hello\n")?;
+//!
+//! let mut buffer = [0_u8; 10];
+//! child.read(&mut buffer)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Graceful dropping
+//!
+//! **Note:** Only available on *nix platforms.
+//!
+//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
+//! kill it gracefully by sending a `SIGINT` and checking, without blocking, if the child has diesd.
+//! If the child is still running, it will block for 2seconds. If the process still doesn't die,
+//! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
+
 /// Possible sources to read from
 #[derive(Debug, Copy, Clone)]
 pub enum ReadSource {
@@ -7,12 +63,19 @@ pub enum ReadSource {
     Stderr,
 }
 
+/// An implementation of [`Process`](../trait.Process.html) that uses [`std::process`](std::process)
+/// as the launcher.
+///
+/// All read and write operations are sync.
+///
+/// **Note:** On *nix platforms, the owned process will have 2 seconds between signals, which is a
+/// blocking wait.
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl crate::PipedSpawner for std::process::Command {
+impl crate::Spawner for std::process::Command {
     type Output = Process;
 
-    fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
+    fn spawn_owned(&mut self) -> std::io::Result<Self::Output> {
         let mut process = self
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
@@ -44,10 +107,10 @@ impl super::Process for Process {
     ///
     /// ```no_run
     /// use std::process::Command;
-    /// use pwner::{ PipedSpawner, Process };
+    /// use pwner::{ Spawner, Process };
     ///
     /// let mut command = Command::new("ls");
-    /// if let Ok(child) = command.spawn_piped() {
+    /// if let Ok(child) = command.spawn_owned() {
     ///     println!("Child's ID is {}", child.id());
     /// } else {
     ///     println!("ls command didn't start");
@@ -69,10 +132,10 @@ impl Process {
     /// ```no_run
     /// use std::io::Read;
     /// use std::process::Command;
-    /// use pwner::PipedSpawner;
+    /// use pwner::Spawner;
     /// use pwner::process::ReadSource;
     ///
-    /// let mut child = Command::new("ls").spawn_piped().unwrap();
+    /// let mut child = Command::new("ls").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
     /// child.read_from(ReadSource::Stdout).read(&mut buffer).unwrap();
     /// ```
@@ -90,9 +153,9 @@ impl Process {
     /// ```no_run
     /// use std::io::{ Read, Write };
     /// use std::process::Command;
-    /// use pwner::PipedSpawner;
+    /// use pwner::Spawner;
     ///
-    /// let mut child = Command::new("cat").spawn_piped().unwrap();
+    /// let mut child = Command::new("cat").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
     /// let (stdin, stdout, _) = child.decompose();
     ///
@@ -208,7 +271,7 @@ impl ProcessImpl {
 
 #[cfg(test)]
 mod test {
-    use crate::PipedSpawner;
+    use crate::Spawner;
 
     #[test]
     fn test_read() {
@@ -216,7 +279,7 @@ mod test {
 
         let child = std::process::Command::new("echo")
             .arg("hello")
-            .spawn_piped()
+            .spawn_owned()
             .unwrap();
         let mut output = String::new();
         let mut reader = std::io::BufReader::new(child);
@@ -229,7 +292,7 @@ mod test {
     fn test_write() {
         use std::io::{BufRead, Write};
 
-        let mut child = std::process::Command::new("cat").spawn_piped().unwrap();
+        let mut child = std::process::Command::new("cat").spawn_owned().unwrap();
         assert!(child.write_all(b"hello\n").is_ok());
 
         let mut output = String::new();
@@ -241,7 +304,7 @@ mod test {
 
     #[test]
     fn test_drop() {
-        let mut child = std::process::Command::new("echo").spawn_piped().unwrap();
+        let mut child = std::process::Command::new("echo").spawn_owned().unwrap();
         assert!(!child.0.take().unwrap().shutdown().is_ok());
     }
 }
