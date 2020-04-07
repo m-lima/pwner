@@ -363,11 +363,8 @@ mod test {
         assert!(child.write_all(b"hello\n").await.is_ok());
 
         let mut buffer = [0_u8; 10];
-        if let Ok(bytes) = child.read(&mut buffer).await {
-            assert_eq!("hello\n", std::str::from_utf8(&buffer[..bytes]).unwrap());
-        } else {
-            assert!(false, "could not read")
-        }
+        let bytes = child.read(&mut buffer).await.unwrap();
+        assert_eq!("hello\n", std::str::from_utf8(&buffer[..bytes]).unwrap());
     }
 
     #[tokio::test]
