@@ -1,4 +1,10 @@
-# pwner [![Github](https://github.com/m-lima/pwner/workflows/build/badge.svg)](https://github.com/m-lima/pwner/actions?workflow=build) [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+# pwner
+[![Github](https://github.com/m-lima/pwner/workflows/build/badge.svg)](https://github.com/m-lima/pwner/actions?workflow=build)
+[![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Cargo](https://img.shields.io/crates/v/pwner.svg)](
+https://crates.io/crates/crossbeam)
+[![Documentation](https://docs.rs/pwner/badge.svg)](
+https://docs.rs/crossbeam)
 
 Pwner is a Process Owner crate that allows ergonomic access to child processes.
 
