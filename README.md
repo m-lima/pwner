@@ -1,4 +1,4 @@
-# pwner
+# pwner [![Github](https://github.com/m-lima/pwner/workflows/build/badge.svg)](https://github.com/m-lima/pwner/actions?workflow=build)
 
 Pwner is a Process Owner crate that allows ergonomic access to child processes.
 
