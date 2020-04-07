@@ -1,4 +1,4 @@
-use pwner::PipedSpawner;
+use pwner::{PipedSpawner, Process};
 
 /// A simnple sync example using threads to achieve concurrency
 ///

@@ -1,3 +1,5 @@
+pub use super::Process as ProcessTrait;
+
 #[derive(Debug, Copy, Clone)]
 pub enum ReadSource {
     Stdout,
@@ -6,7 +8,14 @@ pub enum ReadSource {
 
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl crate::PipedSpawner for std::process::Command {
+impl
+    crate::PipedSpawner<
+        ReadSource,
+        std::process::ChildStdin,
+        std::process::ChildStdout,
+        std::process::ChildStderr,
+    > for std::process::Command
+{
     type Output = Process;
 
     fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
@@ -32,24 +41,31 @@ impl crate::PipedSpawner for std::process::Command {
     }
 }
 
-impl Process {
+impl
+    ProcessTrait<
+        ReadSource,
+        std::process::ChildStdin,
+        std::process::ChildStdout,
+        std::process::ChildStderr,
+    > for Process
+{
     #[must_use]
-    pub fn id(&self) -> u32 {
+    fn id(&self) -> u32 {
         self.0.as_ref().unwrap().process.id()
     }
 
     #[cfg(unix)]
     #[must_use]
-    pub fn pid(&self) -> nix::unistd::Pid {
+    fn pid(&self) -> nix::unistd::Pid {
         self.0.as_ref().unwrap().pid()
     }
 
-    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+    fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
         self.1 = read_source;
         self
     }
 
-    pub fn decompose(
+    fn decompose(
         &mut self,
     ) -> (
         &mut std::process::ChildStdin,
@@ -63,8 +79,10 @@ impl Process {
 
 impl std::ops::Drop for Process {
     fn drop(&mut self) {
-        let process = self.0.take().unwrap();
-        let _ = process.shutdown();
+        if self.0.is_some() {
+            let process = self.0.take().unwrap();
+            let _ = process.shutdown();
+        }
     }
 }
 
@@ -142,8 +160,8 @@ impl ProcessImpl {
                     std::thread::sleep(std::time::Duration::from_secs(2));
                     if let Ok(Exited(_, _)) = wait::waitpid(pid, no_hang) {
                     } else {
-                        // Go for SIGKILL
-                        signal::kill(pid, signal::SIGKILL)?;
+                        // Go for the kill
+                        self.process.kill()?;
                     }
                 }
             }
@@ -151,5 +169,45 @@ impl ProcessImpl {
 
         // Block until process is freed
         self.process.wait().map_err(crate::UnixIoError::from)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::PipedSpawner;
+
+    #[test]
+    fn test_read() {
+        use std::io::BufRead;
+
+        let child = std::process::Command::new("echo")
+            .arg("hello")
+            .spawn_piped()
+            .unwrap();
+        let mut output = String::new();
+        let mut reader = std::io::BufReader::new(child);
+        assert!(reader.read_line(&mut output).is_ok());
+
+        assert_eq!("hello\n", output);
+    }
+
+    #[test]
+    fn test_write() {
+        use std::io::{BufRead, Write};
+
+        let mut child = std::process::Command::new("cat").spawn_piped().unwrap();
+        assert!(child.write_all(b"hello\n").is_ok());
+
+        let mut output = String::new();
+        let mut reader = std::io::BufReader::new(child);
+        assert!(reader.read_line(&mut output).is_ok());
+
+        assert_eq!("hello\n", output);
+    }
+
+    #[test]
+    fn test_drop() {
+        let mut child = std::process::Command::new("echo").spawn_piped().unwrap();
+        assert!(!child.0.take().unwrap().shutdown().is_ok());
     }
 }

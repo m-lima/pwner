@@ -15,7 +15,7 @@ default = []
 async = [ "tokio" ]
 
 [dependencies]
-tokio = { version = "0.2", features = [ "io-std", "io-util", "macros", "process", "rt-core", "sync", "time" ], optional = true }
+tokio = { version = "0.2", features = [ "io-util", "process", "rt-core", "time" ], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.17" }
@@ -27,3 +27,4 @@ required-features = [ "async" ]
 
 [dev-dependencies]
 crossbeam = "0.2"
+tokio = { version = "0.2", features = [ "io-std", "macros" ] }

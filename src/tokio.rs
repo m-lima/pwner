@@ -7,7 +7,14 @@ pub enum ReadSource {
 
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl crate::PipedSpawner for tokio::process::Command {
+impl
+    crate::PipedSpawner<
+        ReadSource,
+        tokio::process::ChildStdin,
+        tokio::process::ChildStdout,
+        tokio::process::ChildStderr,
+    > for tokio::process::Command
+{
     type Output = Process;
 
     fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
@@ -35,28 +42,37 @@ impl crate::PipedSpawner for tokio::process::Command {
 
 impl std::ops::Drop for Process {
     fn drop(&mut self) {
-        tokio::spawn(self.0.take().unwrap().shutdown());
+        if self.0.is_some() {
+            tokio::spawn(self.0.take().unwrap().shutdown());
+        }
     }
 }
 
-impl Process {
+impl
+    super::Process<
+        ReadSource,
+        tokio::process::ChildStdin,
+        tokio::process::ChildStdout,
+        tokio::process::ChildStderr,
+    > for Process
+{
     #[must_use]
-    pub fn id(&self) -> u32 {
+    fn id(&self) -> u32 {
         self.0.as_ref().unwrap().process.id()
     }
 
     #[cfg(unix)]
     #[must_use]
-    pub fn pid(&self) -> nix::unistd::Pid {
+    fn pid(&self) -> nix::unistd::Pid {
         self.0.as_ref().unwrap().pid()
     }
 
-    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+    fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
         self.1 = read_source;
         self
     }
 
-    pub fn decompose(
+    fn decompose(
         &mut self,
     ) -> (
         &mut tokio::process::ChildStdin,
@@ -134,7 +150,7 @@ impl ProcessImpl {
     }
 
     #[cfg(not(unix))]
-    async fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
+    async fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
         self.process.kill();
         self.process.await
     }
@@ -181,5 +197,45 @@ impl ProcessImpl {
 
         // Block until process is freed
         process.await.map_err(crate::UnixIoError::from)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::PipedSpawner;
+
+    #[tokio::test]
+    async fn test_read() {
+        use tokio::io::AsyncReadExt;
+
+        let mut child = tokio::process::Command::new("echo")
+            .arg("hello")
+            .spawn_piped()
+            .unwrap();
+        let mut output = String::new();
+        assert!(child.read_to_string(&mut output).await.is_ok());
+
+        assert_eq!("hello\n", output);
+    }
+
+    #[tokio::test]
+    async fn test_write() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let mut child = tokio::process::Command::new("cat").spawn_piped().unwrap();
+        assert!(child.write_all(b"hello\n").await.is_ok());
+
+        let mut buffer = [0_u8; 10];
+        if let Ok(bytes) = child.read(&mut buffer).await {
+            assert_eq!("hello\n", std::str::from_utf8(&buffer[..bytes]).unwrap());
+        } else {
+            assert!(false, "could not read")
+        }
+    }
+
+    #[tokio::test]
+    async fn test_drop() {
+        let mut child = tokio::process::Command::new("echo").spawn_piped().unwrap();
+        assert!(child.0.take().unwrap().shutdown().await.is_ok());
     }
 }

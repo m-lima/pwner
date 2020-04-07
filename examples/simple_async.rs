@@ -1,4 +1,4 @@
-use pwner::PipedSpawner;
+use pwner::{PipedSpawner, Process};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 /// A simnple async example using `cat` and tokio's single threaded executor
