@@ -2,7 +2,7 @@
 //!
 //! All interactions are blocking, including the dropping of child processes (on *nix platforms).
 //!
-//! # Spawning an owned tokio process
+//! # Spawning an owned process
 //!
 //! ```no_run
 //! use std::process::Command;
