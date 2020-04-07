@@ -1,6 +1,6 @@
 #![allow(clippy::needless_doctest_main)]
 
-//! This module holds the tokio implementation of an async process.
+//! Holds the tokio implementation of an async process.
 //!
 //! All potentially blocking interactions are performed async, including the dropping
 //! of child processes (on *nix platforms).

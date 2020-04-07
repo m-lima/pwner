@@ -1,7 +1,7 @@
 [package]
 name = "pwner"
 edition = "2018"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Marcelo Lima <marcelowind@gmail.com>"]
 readme = "README.md"
 keywords = ["process", "pipe", "async", "tokio"]
@@ -12,7 +12,6 @@ license = "MIT"
 
 [features]
 default = []
-async = [ "tokio" ]
 
 [dependencies]
 tokio = { version = "0.2", features = [ "io-util", "process", "rt-core", "time" ], optional = true }
@@ -23,8 +22,14 @@ nix = { version = "0.17" }
 [[example]]
 name = "simple-async"
 path = "examples/simple_async.rs"
-required-features = [ "async" ]
+required-features = [ "tokio" ]
 
 [dev-dependencies]
 crossbeam = "0.2"
 tokio = { version = "0.2", features = [ "io-std", "macros" ] }
+
+[package.metadata.docs.rs]
+all-features = true
+
+[package.metadata.playground]
+features = ["full"]

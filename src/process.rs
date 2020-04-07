@@ -1,4 +1,4 @@
-//! This module holds the std implementation of a process.
+//! Holds the std implementation of a process.
 //!
 //! All interactions are blocking, including the dropping of child processes (on *nix platforms).
 //!

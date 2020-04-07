@@ -59,7 +59,7 @@
 //! kill it gracefully by sending a `SIGINT`. If the process still doesn't die,
 //! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
 pub mod process;
-#[cfg(feature = "async")]
+#[cfg(feature = "tokio")]
 pub mod tokio;
 
 /// A process builder, providing the wrapped handle, as well as piped handles to stdin,
