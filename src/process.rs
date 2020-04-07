@@ -267,7 +267,7 @@ impl ProcessImpl {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod test {
     use crate::Spawner;
 
