@@ -8,7 +8,7 @@ keywords = ["process", "pipe", "async", "tokio"]
 repository = "https://github.com/m-lima/pwner"
 categories = ["asynchronous", "concurrency"]
 description = "Pwner is a Process Owner crate that allows ergonomic access to child processes"
-license-file = "LICENSE"
+license = "MIT"
 
 [features]
 default = []
