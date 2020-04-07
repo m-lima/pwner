@@ -11,7 +11,7 @@ description = "Pwner is a Process Owner crate that allows ergonomic access to ch
 license = "MIT"
 
 [features]
-default = [ "async" ]
+default = []
 async = [ "tokio" ]
 
 [dependencies]
