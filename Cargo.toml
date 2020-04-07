@@ -19,3 +19,11 @@ tokio = { version = "0.2", features = [ "io-std", "io-util", "macros", "process"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.17" }
+
+[[example]]
+name = "simple-async"
+path = "examples/simple_async.rs"
+required-features = [ "async" ]
+
+[dev-dependencies]
+crossbeam = "0.2"
