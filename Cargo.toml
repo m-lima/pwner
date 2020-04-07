@@ -32,4 +32,4 @@ tokio = { version = "0.2", features = [ "io-std", "macros" ] }
 all-features = true
 
 [package.metadata.playground]
-features = ["full"]
+features = [ "tokio" ]
