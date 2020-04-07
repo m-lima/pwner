@@ -24,6 +24,11 @@ name = "simple-async"
 path = "examples/simple_async.rs"
 required-features = [ "tokio" ]
 
+[[example]]
+name = "interactive"
+path = "examples/interactive.rs"
+required-features = [ "tokio" ]
+
 [dev-dependencies]
 crossbeam = "0.2"
 tokio = { version = "0.2", features = [ "io-std", "macros" ] }
