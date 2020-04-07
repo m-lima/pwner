@@ -1,20 +1,17 @@
+/// Possible sources to read from
 #[derive(Debug, Copy, Clone)]
 pub enum ReadSource {
+    /// Read from the child's stdout
     Stdout,
+    /// Read from the child's stderr
     Stderr,
+    /// Read from whichever has data available, the child's stdout or stderr
     Both,
 }
 
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl
-    crate::PipedSpawner<
-        ReadSource,
-        tokio::process::ChildStdin,
-        tokio::process::ChildStdout,
-        tokio::process::ChildStderr,
-    > for tokio::process::Command
-{
+impl crate::PipedSpawner for tokio::process::Command {
     type Output = Process;
 
     fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
@@ -40,39 +37,76 @@ impl
     }
 }
 
-impl std::ops::Drop for Process {
-    fn drop(&mut self) {
-        if self.0.is_some() {
-            tokio::spawn(self.0.take().unwrap().shutdown());
-        }
-    }
-}
-
-impl
-    super::Process<
-        ReadSource,
-        tokio::process::ChildStdin,
-        tokio::process::ChildStdout,
-        tokio::process::ChildStderr,
-    > for Process
-{
+impl super::Process for Process {
+    /// Returns the OS-assigned process identifier associated with this child.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use tokio::process::Command;
+    /// use pwner::{ PipedSpawner, Process };
+    ///
+    /// let mut command = Command::new("ls");
+    /// if let Ok(child) = command.spawn_piped() {
+    ///     println!("Child's ID is {}", child.id());
+    /// } else {
+    ///     println!("ls command didn't start");
+    /// }
+    /// ```
     #[must_use]
     fn id(&self) -> u32 {
         self.0.as_ref().unwrap().process.id()
     }
+}
 
-    #[cfg(unix)]
-    #[must_use]
-    fn pid(&self) -> nix::unistd::Pid {
-        self.0.as_ref().unwrap().pid()
-    }
-
-    fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+impl Process {
+    /// Choose which pipe to read form next.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::AsyncReadExt;
+    /// use tokio::process::Command;
+    /// use pwner::PipedSpawner;
+    /// use pwner::tokio::ReadSource;
+    ///
+    /// let mut child = Command::new("ls").spawn_piped().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    ///
+    /// child.read_from(ReadSource::Both).read(&mut buffer).await.unwrap();
+    /// # };
+    /// ```
+    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
         self.1 = read_source;
         self
     }
 
-    fn decompose(
+    /// Decomposes the handle into mutable references to the pipes.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::{ AsyncReadExt, AsyncWriteExt };
+    /// use tokio::process::Command;
+    /// use pwner::PipedSpawner;
+    ///
+    /// let mut child = Command::new("cat").spawn_piped().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (stdin, stdout, _) = child.decompose();
+    ///
+    /// stdin.write_all(b"hello\n").await.unwrap();
+    /// stdout.read(&mut buffer).await.unwrap();
+    /// # };
+    /// ```
+    pub fn decompose(
         &mut self,
     ) -> (
         &mut tokio::process::ChildStdin,
@@ -81,6 +115,14 @@ impl
     ) {
         let handle = self.0.as_mut().unwrap();
         (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
+    }
+}
+
+impl std::ops::Drop for Process {
+    fn drop(&mut self) {
+        if self.0.is_some() {
+            tokio::spawn(self.0.take().unwrap().shutdown());
+        }
     }
 }
 

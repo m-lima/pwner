@@ -1,21 +1,15 @@
-pub use super::Process as ProcessTrait;
-
+/// Possible sources to read from
 #[derive(Debug, Copy, Clone)]
 pub enum ReadSource {
+    /// Read from the child's stdout
     Stdout,
+    /// Read from the child's stderr
     Stderr,
 }
 
 pub struct Process(Option<ProcessImpl>, ReadSource);
 
-impl
-    crate::PipedSpawner<
-        ReadSource,
-        std::process::ChildStdin,
-        std::process::ChildStdout,
-        std::process::ChildStderr,
-    > for std::process::Command
-{
+impl crate::PipedSpawner for std::process::Command {
     type Output = Process;
 
     fn spawn_piped(&mut self) -> std::io::Result<Self::Output> {
@@ -41,31 +35,71 @@ impl
     }
 }
 
-impl
-    ProcessTrait<
-        ReadSource,
-        std::process::ChildStdin,
-        std::process::ChildStdout,
-        std::process::ChildStderr,
-    > for Process
-{
+impl super::Process for Process {
+    /// Returns the OS-assigned process identifier associated with this child.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::process::Command;
+    /// use pwner::{ PipedSpawner, Process };
+    ///
+    /// let mut command = Command::new("ls");
+    /// if let Ok(child) = command.spawn_piped() {
+    ///     println!("Child's ID is {}", child.id());
+    /// } else {
+    ///     println!("ls command didn't start");
+    /// }
+    /// ```
     #[must_use]
     fn id(&self) -> u32 {
         self.0.as_ref().unwrap().process.id()
     }
+}
 
-    #[cfg(unix)]
-    #[must_use]
-    fn pid(&self) -> nix::unistd::Pid {
-        self.0.as_ref().unwrap().pid()
-    }
-
-    fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+impl Process {
+    /// Choose which pipe to read form next.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::Read;
+    /// use std::process::Command;
+    /// use pwner::PipedSpawner;
+    /// use pwner::process::ReadSource;
+    ///
+    /// let mut child = Command::new("ls").spawn_piped().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// child.read_from(ReadSource::Stdout).read(&mut buffer).unwrap();
+    /// ```
+    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
         self.1 = read_source;
         self
     }
 
-    fn decompose(
+    /// Decomposes the handle into mutable references to the pipes.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::{ Read, Write };
+    /// use std::process::Command;
+    /// use pwner::PipedSpawner;
+    ///
+    /// let mut child = Command::new("cat").spawn_piped().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (stdin, stdout, _) = child.decompose();
+    ///
+    /// stdin.write_all(b"hello\n").unwrap();
+    /// stdout.read(&mut buffer).unwrap();
+    /// ```
+    pub fn decompose(
         &mut self,
     ) -> (
         &mut std::process::ChildStdin,
