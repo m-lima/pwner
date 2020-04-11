@@ -1,4 +1,4 @@
-#![deny(warnings, clippy::pedantic)]
+#![deny(warnings, missing_docs, clippy::pedantic, clippy::all)]
 #![warn(rust_2018_idioms)]
 
 //! Pwner is a Process Owner crate that allows ergonomic access to child processes.
@@ -67,6 +67,8 @@ pub mod tokio;
 ///
 /// The handle also implements a clean shutdown of the process upon destruction.
 pub trait Spawner {
+    /// The [`Process`](trait.Process.html) implementation output by
+    /// [`spawn_owned()`](#tymethod.spawn_owned)
     type Output: Process;
 
     /// Executes the command as a child process, returning a handle to it.
@@ -94,9 +96,9 @@ pub trait Spawner {
     fn spawn_owned(&mut self) -> std::io::Result<Self::Output>;
 }
 
-/// The trait returned by [`PipedSpwner::spawn_owned()`](trait.PipedSpawner.html#tymethod.spawn_owned).
+/// The trait returned by [`Spawner::spawn_owned()`](trait.Spawner.html#tymethod.spawn_owned).
 ///
-/// All implementations of [`PipedSpawner`] return a concrete instance capable of read/write.
+/// All implementations of [`Spawner`] must return a concrete instance capable of read/write.
 pub trait Process: std::ops::Drop {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
