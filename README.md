@@ -2,9 +2,8 @@
 [![Github](https://github.com/m-lima/pwner/workflows/build/badge.svg)](https://github.com/m-lima/pwner/actions?workflow=build)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Cargo](https://img.shields.io/crates/v/pwner.svg)](
-https://crates.io/crates/crossbeam)
-[![Documentation](https://docs.rs/pwner/badge.svg)](
-https://docs.rs/crossbeam)
+https://crates.io/crates/pwner)
+[![Documentation](https://docs.rs/pwner/badge.svg)](https://docs.rs/pwner)
 
 Pwner is a Process Owner crate that allows ergonomic access to child processes.
 
@@ -57,6 +56,6 @@ use pwner::Spawner;
 
 **Note:** Only available on *nix platforms.
 
-When the owned process gets dropped, [`Process`](trait.Process.html) will try to
+When the owned process gets dropped, `Process` will try to
 kill it gracefully by sending a `SIGINT`. If the process still doesn't die,
 a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
