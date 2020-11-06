@@ -19,7 +19,7 @@ fn main() {
     // Create a scope for the pipes, since they are `&mut`
     crossbeam::scope(|s| {
         // Stdout
-        s.spawn(|| {
+        s.spawn(|_| {
             use std::io::Read;
 
             // Prepare a 1kb buffer
@@ -37,7 +37,7 @@ fn main() {
         });
 
         // Stderr
-        s.spawn(|| {
+        s.spawn(|_| {
             use std::io::Read;
 
             // Prepare a 1kb buffer
@@ -71,5 +71,6 @@ fn main() {
         }
 
         std::process::exit(0);
-    });
+    })
+    .expect("Failed to start threads");
 }

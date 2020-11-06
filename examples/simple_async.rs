@@ -8,7 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 /// - write whatever was captured from `stdin` to child process
 /// - write whatever is in the `stdout` of the child process
 /// - write whatever is in the `stderr` of the child process
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     // Use tokio::process::Command to create a new owned child
     let mut child = tokio::process::Command::new("cat")

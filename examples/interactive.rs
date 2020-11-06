@@ -76,7 +76,7 @@ fn parse(command: &str, children: &[Process]) -> Command {
     }
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let mut children = Vec::<Process>::new();
 

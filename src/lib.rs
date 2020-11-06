@@ -1,5 +1,6 @@
 #![deny(warnings, missing_docs, clippy::pedantic, clippy::all)]
 #![warn(rust_2018_idioms)]
+#![forbid(unsafe_code)]
 
 //! Pwner is a Process Owner crate that allows ergonomic access to child processes.
 //!
@@ -112,13 +113,16 @@ pub trait Process: std::ops::Drop {
     ///
     /// let mut command = Command::new("ls");
     /// if let Ok(child) = command.spawn_owned() {
-    ///     println!("Child's ID is {}", child.id());
+    ///     match child.id() {
+    ///       Some(pid) => println!("Child's ID is {}", pid),
+    ///       None => println!("Child has already exited"),
+    ///     }
     /// } else {
     ///     println!("ls command didn't start");
     /// }
     /// ```
     #[must_use]
-    fn id(&self) -> u32;
+    fn id(&self) -> Option<u32>;
 }
 
 #[cfg(unix)]

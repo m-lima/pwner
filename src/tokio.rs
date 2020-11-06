@@ -74,7 +74,7 @@
 //! use tokio::process::Command;
 //! use pwner::Spawner;
 //!
-//! #[tokio::main]
+//! #[tokio::main(flavor = "current_thread")]
 //! async fn main() {
 //!     let child = Command::new("ls").spawn_owned().expect("ls command failed to start");
 //! }
@@ -143,13 +143,16 @@ impl super::Process for Process {
     ///
     /// let mut command = Command::new("ls");
     /// if let Ok(child) = command.spawn_owned() {
-    ///     println!("Child's ID is {}", child.id());
+    ///     match child.id() {
+    ///       Some(pid) => println!("Child's ID is {}", pid),
+    ///       None => println!("Child has already exited"),
+    ///     }
     /// } else {
     ///     println!("ls command didn't start");
     /// }
     /// ```
     #[must_use]
-    fn id(&self) -> u32 {
+    fn id(&self) -> Option<u32> {
         self.0.as_ref().unwrap().process.id()
     }
 }
@@ -247,8 +250,8 @@ impl tokio::io::AsyncRead for Process {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
         match self.1 {
             ReadSource::Stdout => {
                 std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdout).poll_read(cx, buf)
@@ -280,8 +283,10 @@ impl ProcessImpl {
     // Allowed because we are already assuming *nix
     #[allow(clippy::cast_possible_wrap)]
     #[cfg(unix)]
-    pub fn pid(&self) -> nix::unistd::Pid {
-        nix::unistd::Pid::from_raw(self.process.id() as nix::libc::pid_t)
+    pub fn pid(&self) -> Option<nix::unistd::Pid> {
+        self.process
+            .id()
+            .map(|pid| nix::unistd::Pid::from_raw(pid as nix::libc::pid_t))
     }
 
     #[cfg(not(unix))]
@@ -294,8 +299,12 @@ impl ProcessImpl {
     async fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
         use tokio::io::AsyncWriteExt;
 
-        // Copy pid
-        let pid = self.pid();
+        // Copy the pid if the child has not exited yet
+        let pid = match self.process.try_wait() {
+            Ok(None) => self.pid().unwrap(),
+            Ok(Some(status)) => return Ok(status),
+            Err(err) => return Err(crate::UnixIoError::from(err)),
+        };
 
         // Close stdin
         self.stdin.flush().await?;
@@ -314,24 +323,33 @@ impl ProcessImpl {
             use std::time::Duration;
             use tokio::time::timeout;
 
-            if timeout(Duration::from_secs(2), &mut process).await.is_err() {
+            if timeout(Duration::from_secs(2), process.wait())
+                .await
+                .is_err()
+            {
                 // Try SIGINT
                 signal::kill(pid, signal::SIGINT)?;
             }
 
-            if timeout(Duration::from_secs(2), &mut process).await.is_err() {
+            if timeout(Duration::from_secs(2), process.wait())
+                .await
+                .is_err()
+            {
                 // Try SIGTERM
                 signal::kill(pid, signal::SIGTERM)?;
             }
 
-            if timeout(Duration::from_secs(2), &mut process).await.is_err() {
+            if timeout(Duration::from_secs(2), process.wait())
+                .await
+                .is_err()
+            {
                 // Go for the kill
-                process.kill()?;
+                process.kill().await?;
             }
         }
 
         // Block until process is freed
-        process.await.map_err(crate::UnixIoError::from)
+        process.wait().await.map_err(crate::UnixIoError::from)
     }
 }
 

@@ -109,14 +109,17 @@ impl super::Process for Process {
     ///
     /// let mut command = Command::new("ls");
     /// if let Ok(child) = command.spawn_owned() {
-    ///     println!("Child's ID is {}", child.id());
+    ///     match child.id() {
+    ///       Some(pid) => println!("Child's ID is {}", pid),
+    ///       None => println!("Child has already exited"),
+    ///     }
     /// } else {
     ///     println!("ls command didn't start");
     /// }
     /// ```
     #[must_use]
-    fn id(&self) -> u32 {
-        self.0.as_ref().unwrap().process.id()
+    fn id(&self) -> Option<u32> {
+        Some(self.0.as_ref().unwrap().process.id())
     }
 }
 
