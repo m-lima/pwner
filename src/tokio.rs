@@ -130,7 +130,9 @@ impl crate::Spawner for tokio::process::Command {
     }
 }
 
-impl super::Process for Process {
+impl super::Process for Process {}
+
+impl Process {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
     /// # Examples
@@ -139,7 +141,7 @@ impl super::Process for Process {
     ///
     /// ```no_run
     /// use tokio::process::Command;
-    /// use pwner::{ Spawner, Process };
+    /// use pwner::Spawner;
     ///
     /// let mut command = Command::new("ls");
     /// if let Ok(child) = command.spawn_owned() {
@@ -152,12 +154,10 @@ impl super::Process for Process {
     /// }
     /// ```
     #[must_use]
-    fn id(&self) -> Option<u32> {
+    pub fn id(&self) -> Option<u32> {
         self.0.as_ref().unwrap().process.id()
     }
-}
 
-impl Process {
     /// Choose which pipe to read form next.
     ///
     /// # Examples

@@ -100,30 +100,7 @@ pub trait Spawner {
 /// The trait returned by [`Spawner::spawn_owned()`](trait.Spawner.html#tymethod.spawn_owned).
 ///
 /// All implementations of [`Spawner`] must return a concrete instance capable of read/write.
-pub trait Process: std::ops::Drop {
-    /// Returns the OS-assigned process identifier associated with this child.
-    ///
-    /// # Examples
-    ///
-    /// Basic usage:
-    ///
-    /// ```no_run
-    /// use std::process::Command;
-    /// use pwner::{ Spawner, Process };
-    ///
-    /// let mut command = Command::new("ls");
-    /// if let Ok(child) = command.spawn_owned() {
-    ///     match child.id() {
-    ///       Some(pid) => println!("Child's ID is {}", pid),
-    ///       None => println!("Child has already exited"),
-    ///     }
-    /// } else {
-    ///     println!("ls command didn't start");
-    /// }
-    /// ```
-    #[must_use]
-    fn id(&self) -> Option<u32>;
-}
+pub trait Process: std::ops::Drop {}
 
 #[cfg(unix)]
 #[derive(Debug)]

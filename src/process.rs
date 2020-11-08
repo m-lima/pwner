@@ -96,7 +96,9 @@ impl crate::Spawner for std::process::Command {
     }
 }
 
-impl super::Process for Process {
+impl super::Process for Process {}
+
+impl Process {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
     /// # Examples
@@ -105,25 +107,20 @@ impl super::Process for Process {
     ///
     /// ```no_run
     /// use std::process::Command;
-    /// use pwner::{ Spawner, Process };
+    /// use pwner::Spawner;
     ///
     /// let mut command = Command::new("ls");
     /// if let Ok(child) = command.spawn_owned() {
-    ///     match child.id() {
-    ///       Some(pid) => println!("Child's ID is {}", pid),
-    ///       None => println!("Child has already exited"),
-    ///     }
+    ///     println!("Child's ID is {}", child.id());
     /// } else {
     ///     println!("ls command didn't start");
     /// }
     /// ```
     #[must_use]
-    fn id(&self) -> Option<u32> {
-        Some(self.0.as_ref().unwrap().process.id())
+    pub fn id(&self) -> u32 {
+        self.0.as_ref().unwrap().process.id()
     }
-}
 
-impl Process {
     /// Choose which pipe to read form next.
     ///
     /// # Examples
