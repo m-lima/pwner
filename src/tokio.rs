@@ -212,6 +212,41 @@ impl Process {
         let handle = self.0.as_mut().unwrap();
         (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
     }
+
+    /// Consumes the process to allow awaiting for shutdown.
+    ///
+    /// This method is essentially the same as a `drop`, however it return a `Future` which allows
+    /// the parent to await the shutdown.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let child = Command::new("top").spawn_owned().unwrap();
+    /// child.shutdown().await.unwrap();
+    /// # };
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// * [`std::io::Error`] if failure when killing the process.
+    ///
+    /// [`std::io::Error`]: std::io::Error
+    pub async fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
+        match self.0.take().unwrap().shutdown().await {
+            Ok(status) => Ok(status),
+            Err(crate::UnixIoError::Io(err)) => Err(err),
+            Err(crate::UnixIoError::Unix(err)) => match err.as_errno() {
+                Some(errno) => Err(std::io::Error::from_raw_os_error(errno as i32)),
+                None => Err(std::io::ErrorKind::Other.into()),
+            },
+        }
+    }
 }
 
 impl std::ops::Drop for Process {
@@ -297,22 +332,12 @@ impl ProcessImpl {
 
     #[cfg(unix)]
     async fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
-        use tokio::io::AsyncWriteExt;
-
         // Copy the pid if the child has not exited yet
         let pid = match self.process.try_wait() {
             Ok(None) => self.pid().unwrap(),
             Ok(Some(status)) => return Ok(status),
             Err(err) => return Err(crate::UnixIoError::from(err)),
         };
-
-        // Close stdin
-        self.stdin.flush().await?;
-        std::mem::drop(self.stdin);
-
-        // Close outputs
-        std::mem::drop(self.stdout);
-        std::mem::drop(self.stderr);
 
         // Pin the process
         let mut process = self.process;
