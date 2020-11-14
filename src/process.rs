@@ -68,10 +68,10 @@ pub enum ReadSource {
 ///
 /// **Note:** On *nix platforms, the owned process will have 2 seconds between signals, which is a
 /// blocking wait.
-pub struct Process(Option<ProcessImpl>, ReadSource);
+pub struct Duplex(Simplex, Output);
 
-impl crate::Spawner for std::process::Command {
-    type Output = Process;
+impl super::Spawner for std::process::Command {
+    type Output = Duplex;
 
     fn spawn_owned(&mut self) -> std::io::Result<Self::Output> {
         let mut process = self
@@ -84,21 +84,20 @@ impl crate::Spawner for std::process::Command {
         let stdout = process.stdout.take().unwrap();
         let stderr = process.stderr.take().unwrap();
 
-        Ok(Process(
-            Some(ProcessImpl {
-                process,
-                stdin,
+        Ok(Duplex(
+            Simplex(Some(ProcessImpl { process, stdin })),
+            Output {
+                read_source: ReadSource::Stdout,
                 stdout,
                 stderr,
-            }),
-            ReadSource::Stdout,
+            },
         ))
     }
 }
 
-impl super::Process for Process {}
+impl super::Process for Duplex {}
 
-impl Process {
+impl Duplex {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
     /// # Examples
@@ -118,7 +117,7 @@ impl Process {
     /// ```
     #[must_use]
     pub fn id(&self) -> u32 {
-        self.0.as_ref().unwrap().process.id()
+        self.0.id()
     }
 
     /// Choose which pipe to read form next.
@@ -138,7 +137,7 @@ impl Process {
     /// child.read_from(ReadSource::Stdout).read(&mut buffer).unwrap();
     /// ```
     pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
-        self.1 = read_source;
+        self.1.read_from(read_source);
         self
     }
 
@@ -155,24 +154,191 @@ impl Process {
     ///
     /// let mut child = Command::new("cat").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
-    /// let (stdin, stdout, _) = child.decompose();
+    /// let (stdin, stdout, _) = child.pipes();
     ///
     /// stdin.write_all(b"hello\n").unwrap();
     /// stdout.read(&mut buffer).unwrap();
     /// ```
-    pub fn decompose(
+    pub fn pipes(
         &mut self,
     ) -> (
         &mut std::process::ChildStdin,
         &mut std::process::ChildStdout,
         &mut std::process::ChildStderr,
     ) {
-        let handle = self.0.as_mut().unwrap();
-        (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
+        (self.0.stdin(), &mut self.1.stdout, &mut self.1.stderr)
+    }
+
+    /// Separates the process and its input from the output pipes. Ownership is retained by a
+    /// [`Simplex`] which still implements a graceful drop of the child process.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::{Read, Write};
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let child = Command::new("cat").spawn_owned().unwrap();
+    /// let (mut input_only_process, mut output) = child.decompose();
+    ///
+    /// // Spawn printing thread
+    /// std::thread::spawn(move || {
+    ///     let mut buffer = [0; 1024];
+    ///     while let Ok(bytes) = output.read(&mut buffer) {
+    ///         if let Ok(string) = std::str::from_utf8(&buffer[..bytes]) {
+    ///             print!("{}", string);
+    ///         }
+    ///     }
+    /// });
+    ///
+    /// // Interact normally with the child process
+    /// input_only_process.write_all(b"hello\n").unwrap();
+    /// ```
+    ///
+    /// [`Simplex`]: struct.Simplex
+    #[must_use]
+    pub fn decompose(self) -> (Simplex, Output) {
+        (self.0, self.1)
+    }
+
+    /// Completely releases the ownership of the child process. The raw underlying process and
+    /// pipes are returned and no wrapping function is applicable any longer.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::{ Read, Write };
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let mut child = Command::new("cat").spawn_owned().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (process, mut stdin, mut stdout, _) = child.eject();
+    ///
+    /// stdin.write_all(b"hello\n").unwrap();
+    /// stdout.read(&mut buffer).unwrap();
+    ///
+    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// ```
+    #[must_use]
+    pub fn eject(
+        self,
+    ) -> (
+        std::process::Child,
+        std::process::ChildStdin,
+        std::process::ChildStdout,
+        std::process::ChildStderr,
+    ) {
+        let (process, stdin) = self.0.eject();
+        let (stdout, stderr) = self.1.eject();
+        (process, stdin, stdout, stderr)
     }
 }
 
-impl std::ops::Drop for Process {
+impl std::io::Write for Duplex {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+impl std::io::Read for Duplex {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.1.read(buf)
+    }
+}
+
+/// An implementation of [`Process`](../trait.Process.html) that is stripped from any output
+/// pipes.
+///
+/// All write operations are sync.
+///
+/// # Examples
+///
+/// ```no_run
+/// use std::process::Command;
+/// use pwner::Spawner;
+///
+/// let mut command = Command::new("ls");
+/// if let Ok(child) = command.spawn_owned() {
+///     let (input_only_process, _) = child.decompose();
+/// } else {
+///     println!("ls command didn't start");
+/// }
+/// ```
+///
+/// **Note:** On *nix platforms, the owned process will have 2 seconds between signals, which is a
+/// blocking wait.
+#[allow(clippy::module_name_repetitions)]
+pub struct Simplex(Option<ProcessImpl>);
+
+impl super::Process for Simplex {}
+
+impl Simplex {
+    /// Returns the OS-assigned process identifier associated with this child.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let mut command = Command::new("ls");
+    /// if let Ok(child) = command.spawn_owned() {
+    ///     let (process, _) = child.decompose();
+    ///     println!("Child's ID is {}", process.id());
+    /// } else {
+    ///     println!("ls command didn't start");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn id(&self) -> u32 {
+        self.0.as_ref().unwrap().process.id()
+    }
+
+    fn stdin(&mut self) -> &mut std::process::ChildStdin {
+        &mut self.0.as_mut().unwrap().stdin
+    }
+
+    /// Completely releases the ownership of the child process. The raw underlying process and
+    /// pipes are returned and no wrapping function is applicable any longer.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::{ Read, Write };
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let mut child = Command::new("cat").spawn_owned().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (process, mut stdin, mut stdout, _) = child.eject();
+    ///
+    /// stdin.write_all(b"hello\n").unwrap();
+    /// stdout.read(&mut buffer).unwrap();
+    ///
+    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// ```
+    #[must_use]
+    pub fn eject(mut self) -> (std::process::Child, std::process::ChildStdin) {
+        let process = self.0.take().unwrap();
+        (process.process, process.stdin)
+    }
+}
+
+impl std::ops::Drop for Simplex {
     fn drop(&mut self) {
         if self.0.is_some() {
             let process = self.0.take().unwrap();
@@ -181,7 +347,7 @@ impl std::ops::Drop for Process {
     }
 }
 
-impl std::io::Write for Process {
+impl std::io::Write for Simplex {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         self.0.as_mut().unwrap().stdin.write(buf)
     }
@@ -191,11 +357,73 @@ impl std::io::Write for Process {
     }
 }
 
-impl std::io::Read for Process {
+/// A readable handle for both the stdout and stderr of the child process.
+pub struct Output {
+    read_source: ReadSource,
+    stdout: std::process::ChildStdout,
+    stderr: std::process::ChildStderr,
+}
+
+impl Output {
+    /// Choose which pipe to read form next.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::Read;
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    /// use pwner::process::ReadSource;
+    ///
+    /// let (process, mut output) = Command::new("ls").spawn_owned().unwrap().decompose();
+    /// let mut buffer = [0_u8; 1024];
+    /// output.read_from(ReadSource::Stdout).read(&mut buffer).unwrap();
+    /// ```
+    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+        self.read_source = read_source;
+        self
+    }
+
+    /// Decomposes the handle into mutable references to the pipes.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use std::io::{ Read, Write };
+    /// use std::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let (process, mut output) = Command::new("ls").spawn_owned().unwrap().decompose();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (stdout, stderr) = output.pipes();
+    ///
+    /// stdout.read(&mut buffer).unwrap();
+    /// ```
+    pub fn pipes(
+        &mut self,
+    ) -> (
+        &mut std::process::ChildStdout,
+        &mut std::process::ChildStderr,
+    ) {
+        (&mut self.stdout, &mut self.stderr)
+    }
+
+    /// Consumes this struct returning the containing pipes.
+    #[must_use]
+    pub fn eject(self) -> (std::process::ChildStdout, std::process::ChildStderr) {
+        (self.stdout, self.stderr)
+    }
+}
+
+impl std::io::Read for Output {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.1 {
-            ReadSource::Stdout => self.0.as_mut().unwrap().stdout.read(buf),
-            ReadSource::Stderr => self.0.as_mut().unwrap().stderr.read(buf),
+        match self.read_source {
+            ReadSource::Stdout => self.stdout.read(buf),
+            ReadSource::Stderr => self.stderr.read(buf),
         }
     }
 }
@@ -203,8 +431,6 @@ impl std::io::Read for Process {
 struct ProcessImpl {
     process: std::process::Child,
     stdin: std::process::ChildStdin,
-    stdout: std::process::ChildStdout,
-    stderr: std::process::ChildStderr,
 }
 
 impl ProcessImpl {
@@ -222,7 +448,7 @@ impl ProcessImpl {
     }
 
     #[cfg(unix)]
-    fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
+    fn shutdown(mut self) -> Result<std::process::ExitStatus, super::UnixIoError> {
         use std::io::Write;
 
         // Copy pid
@@ -231,10 +457,6 @@ impl ProcessImpl {
         // Close stdin
         self.stdin.flush()?;
         std::mem::drop(self.stdin);
-
-        // Close outputs
-        std::mem::drop(self.stdout);
-        std::mem::drop(self.stderr);
 
         if let Ok(status) = self.process.try_wait() {
             if status.is_none() {
@@ -263,7 +485,7 @@ impl ProcessImpl {
         }
 
         // Block until process is freed
-        self.process.wait().map_err(crate::UnixIoError::from)
+        self.process.wait().map_err(super::UnixIoError::from)
     }
 }
 
@@ -272,7 +494,7 @@ mod test {
     use crate::Spawner;
 
     #[test]
-    fn test_read() {
+    fn read() {
         use std::io::BufRead;
 
         let child = std::process::Command::new("sh")
@@ -288,7 +510,7 @@ mod test {
     }
 
     #[test]
-    fn test_write() {
+    fn write() {
         use std::io::{BufRead, Write};
 
         let mut child = std::process::Command::new("cat").spawn_owned().unwrap();
@@ -302,8 +524,24 @@ mod test {
     }
 
     #[test]
-    fn test_drop() {
-        let mut child = std::process::Command::new("ls").spawn_owned().unwrap();
-        assert!(!child.0.take().unwrap().shutdown().is_ok());
+    fn decompose() {
+        use std::io::{BufRead, Write};
+
+        let child = std::process::Command::new("cat").spawn_owned().unwrap();
+        let (mut child, output) = child.decompose();
+        assert!(child.write_all(b"hello\n").is_ok());
+
+        let mut buffer = String::new();
+        let mut reader = std::io::BufReader::new(output);
+        assert!(reader.read_line(&mut buffer).is_ok());
+
+        assert_eq!("hello\n", buffer);
+    }
+
+    #[test]
+    fn drop() {
+        let child = std::process::Command::new("ls").spawn_owned().unwrap();
+        let mut simplex = child.0;
+        assert!(!simplex.0.take().unwrap().shutdown().is_ok());
     }
 }

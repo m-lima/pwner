@@ -100,7 +100,7 @@ pub trait Spawner {
 /// The trait returned by [`Spawner::spawn_owned()`](trait.Spawner.html#tymethod.spawn_owned).
 ///
 /// All implementations of [`Spawner`] must return a concrete instance capable of read/write.
-pub trait Process: std::ops::Drop {}
+pub trait Process {}
 
 #[cfg(unix)]
 #[derive(Debug)]

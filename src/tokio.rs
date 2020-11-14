@@ -383,7 +383,7 @@ mod test {
     use crate::Spawner;
 
     #[tokio::test]
-    async fn test_read() {
+    async fn read() {
         use tokio::io::AsyncReadExt;
 
         let mut child = tokio::process::Command::new("sh")
@@ -398,7 +398,7 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_write() {
+    async fn write() {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let mut child = tokio::process::Command::new("cat").spawn_owned().unwrap();

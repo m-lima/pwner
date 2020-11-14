@@ -14,7 +14,7 @@ fn main() {
         .expect("Couldn't start the child process");
 
     // Decompose the child into the three pipes
-    let (stdin, stdout, stderr) = child.decompose();
+    let (stdin, stdout, stderr) = child.pipes();
 
     // Create a scope for the pipes, since they are `&mut`
     crossbeam::scope(|s| {
