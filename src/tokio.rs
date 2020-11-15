@@ -249,7 +249,7 @@ impl Duplex {
     /// Completely releases the ownership of the child process. The raw underlying process and
     /// pipes are returned and no wrapping function is applicable any longer.
     ///
-    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
+    /// **Note:** By ejecting the process, graceful drop will no longer be available.
     ///
     /// # Examples
     ///
@@ -268,7 +268,7 @@ impl Duplex {
     /// stdin.write_all(b"hello\n").await.unwrap();
     /// stdout.read(&mut buffer).await.unwrap();
     ///
-    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// // Graceful drop will not be executed for `child` as the ejected variable leaves scope here
     /// # };
     /// ```
     #[must_use]
@@ -406,7 +406,7 @@ impl Simplex {
     /// Completely releases the ownership of the child process. The raw underlying process and
     /// pipes are returned and no wrapping function is applicable any longer.
     ///
-    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
+    /// **Note:** By ejecting the process, graceful drop will no longer be available.
     ///
     /// # Examples
     ///
@@ -425,7 +425,7 @@ impl Simplex {
     /// stdin.write_all(b"hello\n").await.unwrap();
     /// output.read(&mut buffer).await.unwrap();
     ///
-    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// // Graceful drop will not be executed for `child` as the ejected variable leaves scope here
     /// # };
     /// ```
     #[must_use]
