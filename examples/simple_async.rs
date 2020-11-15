@@ -16,7 +16,7 @@ async fn main() {
         .expect("Couldn't start the child process");
 
     // Decompose the child into the three pipes
-    let (stdin, stdout, stderr) = child.decompose();
+    let (stdin, stdout, stderr) = child.pipes();
 
     // Create one 1kb buffer per pipe
     let mut stdin_buffer = [0_u8; 1024];

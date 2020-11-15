@@ -1,6 +1,6 @@
 struct Process {
     name: String,
-    process: pwner::tokio::Process,
+    process: pwner::tokio::Duplex,
 }
 
 enum Command {
@@ -153,7 +153,7 @@ async fn main() {
 
                 let process = &mut children[index];
 
-                let (stdin, stdout, stderr) = process.process.decompose();
+                let (stdin, stdout, stderr) = process.process.pipes();
                 let mut stdin_buffer = [0u8; 1024];
                 let mut stdout_buffer = [0_u8; 1024];
                 let mut stderr_buffer = [0_u8; 1024];

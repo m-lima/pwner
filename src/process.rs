@@ -47,7 +47,7 @@
 //!
 //! **Note:** Only available on *nix platforms.
 //!
-//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
+//! When the owned process gets dropped, [`Process`](../trait.Process.html) will try to
 //! kill it gracefully by sending a `SIGINT` and checking, without blocking, if the child has diesd.
 //! If the child is still running, it will block for 2seconds. If the process still doesn't die,
 //! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
@@ -170,7 +170,7 @@ impl Duplex {
     }
 
     /// Separates the process and its input from the output pipes. Ownership is retained by a
-    /// [`Simplex`] which still implements a graceful drop of the child process.
+    /// [`Simplex`](struct.Simplex.html) which still implements a graceful drop of the child process.
     ///
     /// # Examples
     ///
@@ -197,8 +197,6 @@ impl Duplex {
     /// // Interact normally with the child process
     /// input_only_process.write_all(b"hello\n").unwrap();
     /// ```
-    ///
-    /// [`Simplex`]: struct.Simplex
     #[must_use]
     pub fn decompose(self) -> (Simplex, Output) {
         (self.0, self.1)
@@ -206,6 +204,8 @@ impl Duplex {
 
     /// Completely releases the ownership of the child process. The raw underlying process and
     /// pipes are returned and no wrapping function is applicable any longer.
+    ///
+    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
     ///
     /// # Examples
     ///
@@ -313,6 +313,8 @@ impl Simplex {
     /// Completely releases the ownership of the child process. The raw underlying process and
     /// pipes are returned and no wrapping function is applicable any longer.
     ///
+    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
+    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -322,12 +324,12 @@ impl Simplex {
     /// use std::process::Command;
     /// use pwner::Spawner;
     ///
-    /// let mut child = Command::new("cat").spawn_owned().unwrap();
+    /// let (child, mut output) = Command::new("cat").spawn_owned().unwrap().decompose();
     /// let mut buffer = [0_u8; 1024];
-    /// let (process, mut stdin, mut stdout, _) = child.eject();
+    /// let (process, mut stdin) = child.eject();
     ///
     /// stdin.write_all(b"hello\n").unwrap();
-    /// stdout.read(&mut buffer).unwrap();
+    /// output.read(&mut buffer).unwrap();
     ///
     /// // Drop will not be executed for `child` as the ejected variable leaves scope here
     /// ```

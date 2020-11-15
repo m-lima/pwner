@@ -102,10 +102,10 @@ pub enum ReadSource {
 /// # Panics
 ///
 /// When, on *nix platforms, a process gets dropped without a runtime.
-pub struct Process(Option<ProcessImpl>, ReadSource);
+pub struct Duplex(Simplex, Output);
 
-impl crate::Spawner for tokio::process::Command {
-    type Output = Process;
+impl super::Spawner for tokio::process::Command {
+    type Output = Duplex;
 
     fn spawn_owned(&mut self) -> std::io::Result<Self::Output> {
         let mut process = self
@@ -118,21 +118,20 @@ impl crate::Spawner for tokio::process::Command {
         let stdout = process.stdout.take().unwrap();
         let stderr = process.stderr.take().unwrap();
 
-        Ok(Process(
-            Some(ProcessImpl {
-                process,
-                stdin,
+        Ok(Duplex(
+            Simplex(Some(ProcessImpl { process, stdin })),
+            Output {
+                read_source: ReadSource::Both,
                 stdout,
                 stderr,
-            }),
-            ReadSource::Both,
+            },
         ))
     }
 }
 
-impl super::Process for Process {}
+impl super::Process for Duplex {}
 
-impl Process {
+impl Duplex {
     /// Returns the OS-assigned process identifier associated with this child.
     ///
     /// # Examples
@@ -155,7 +154,7 @@ impl Process {
     /// ```
     #[must_use]
     pub fn id(&self) -> Option<u32> {
-        self.0.as_ref().unwrap().process.id()
+        self.0.id()
     }
 
     /// Choose which pipe to read form next.
@@ -178,7 +177,7 @@ impl Process {
     /// # };
     /// ```
     pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
-        self.1 = read_source;
+        self.1.read_from(read_source);
         self
     }
 
@@ -196,21 +195,94 @@ impl Process {
     ///
     /// let mut child = Command::new("cat").spawn_owned().unwrap();
     /// let mut buffer = [0_u8; 1024];
-    /// let (stdin, stdout, _) = child.decompose();
+    /// let (stdin, stdout, _) = child.pipes();
     ///
     /// stdin.write_all(b"hello\n").await.unwrap();
     /// stdout.read(&mut buffer).await.unwrap();
     /// # };
     /// ```
-    pub fn decompose(
+    pub fn pipes(
         &mut self,
     ) -> (
         &mut tokio::process::ChildStdin,
         &mut tokio::process::ChildStdout,
         &mut tokio::process::ChildStderr,
     ) {
-        let handle = self.0.as_mut().unwrap();
-        (&mut handle.stdin, &mut handle.stdout, &mut handle.stderr)
+        (self.0.stdin(), &mut self.1.stdout, &mut self.1.stderr)
+    }
+
+    /// Separates the process and its input from the output pipes. Ownership is retained by a
+    /// [`Simplex`](struct.Simplex.html) which still implements a graceful drop of the child process.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::{ AsyncReadExt, AsyncWriteExt };
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let child = Command::new("cat").spawn_owned().unwrap();
+    /// let (mut input_only_process, mut output) = child.decompose();
+    ///
+    /// // Spawn printing task
+    /// tokio::spawn(async move {
+    ///     let mut buffer = [0; 1024];
+    ///     while let Ok(bytes) = output.read(&mut buffer).await {
+    ///         if let Ok(string) = std::str::from_utf8(&buffer[..bytes]) {
+    ///             print!("{}", string);
+    ///         }
+    ///     }
+    /// });
+    ///
+    /// // Interact normally with the child process
+    /// input_only_process.write_all(b"hello\n").await.unwrap();
+    /// # };
+    /// ```
+    #[must_use]
+    pub fn decompose(self) -> (Simplex, Output) {
+        (self.0, self.1)
+    }
+
+    /// Completely releases the ownership of the child process. The raw underlying process and
+    /// pipes are returned and no wrapping function is applicable any longer.
+    ///
+    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::{ AsyncReadExt, AsyncWriteExt };
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let mut child = Command::new("cat").spawn_owned().unwrap();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (process, mut stdin, mut stdout, _) = child.eject();
+    ///
+    /// stdin.write_all(b"hello\n").await.unwrap();
+    /// stdout.read(&mut buffer).await.unwrap();
+    ///
+    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// # };
+    /// ```
+    #[must_use]
+    pub fn eject(
+        self,
+    ) -> (
+        tokio::process::Child,
+        tokio::process::ChildStdin,
+        tokio::process::ChildStdout,
+        tokio::process::ChildStderr,
+    ) {
+        let (process, stdin) = self.0.eject();
+        let (stdout, stderr) = self.1.eject();
+        (process, stdin, stdout, stderr)
     }
 
     /// Consumes the process to allow awaiting for shutdown.
@@ -234,14 +306,163 @@ impl Process {
     ///
     /// # Errors
     ///
+    /// * [`std::io::Error`](std::io::Error) if failure when killing the process.
+    pub async fn shutdown(self) -> std::io::Result<std::process::ExitStatus> {
+        self.0.shutdown().await
+    }
+}
+
+impl tokio::io::AsyncWrite for Duplex {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        ctx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        std::pin::Pin::new(&mut self.0).poll_write(ctx, buf)
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        ctx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0).poll_flush(ctx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        ctx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.0).poll_shutdown(ctx)
+    }
+}
+
+impl tokio::io::AsyncRead for Duplex {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        ctx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.1).poll_read(ctx, buf)
+    }
+}
+
+/// An implementation of [`Process`](../trait.Process.html) that is stripped from any output
+/// pipes.
+///
+/// All write operations are async.
+///
+/// # Examples
+///
+/// ```no_run
+/// use tokio::process::Command;
+/// use pwner::Spawner;
+///
+/// let mut command = Command::new("ls");
+/// if let Ok(child) = command.spawn_owned() {
+///     let (input_only_process, _) = child.decompose();
+/// } else {
+///     println!("ls command didn't start");
+/// }
+/// ```
+///
+/// **Note:** On *nix platforms, the owned process will have 2 seconds between signals, which is a
+/// blocking wait.
+#[allow(clippy::module_name_repetitions)]
+pub struct Simplex(Option<ProcessImpl>);
+
+impl super::Process for Simplex {}
+
+impl Simplex {
+    /// Returns the OS-assigned process identifier associated with this child.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let mut command = Command::new("ls");
+    /// if let Ok(child) = command.spawn_owned() {
+    ///     let (process, _) = child.decompose();
+    ///     match process.id() {
+    ///       Some(pid) => println!("Child's ID is {}", pid),
+    ///       None => println!("Child has already exited"),
+    ///     }
+    /// } else {
+    ///     println!("ls command didn't start");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn id(&self) -> Option<u32> {
+        self.0.as_ref().unwrap().process.id()
+    }
+
+    fn stdin(&mut self) -> &mut tokio::process::ChildStdin {
+        &mut self.0.as_mut().unwrap().stdin
+    }
+
+    /// Completely releases the ownership of the child process. The raw underlying process and
+    /// pipes are returned and no wrapping function is applicable any longer.
+    ///
+    /// **Note:** By ejecting the process, no graceful drop will be available any longer.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::{ AsyncReadExt, AsyncWriteExt };
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let (child, mut output) = Command::new("cat").spawn_owned().unwrap().decompose();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (process, mut stdin) = child.eject();
+    ///
+    /// stdin.write_all(b"hello\n").await.unwrap();
+    /// output.read(&mut buffer).await.unwrap();
+    ///
+    /// // Drop will not be executed for `child` as the ejected variable leaves scope here
+    /// # };
+    /// ```
+    #[must_use]
+    pub fn eject(mut self) -> (tokio::process::Child, tokio::process::ChildStdin) {
+        let process = self.0.take().unwrap();
+        (process.process, process.stdin)
+    }
+
+    /// Consumes the process to allow awaiting for shutdown.
+    ///
+    /// This method is essentially the same as a `drop`, however it return a `Future` which allows
+    /// the parent to await the shutdown.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let (child, _) = Command::new("top").spawn_owned().unwrap().decompose();
+    /// child.shutdown().await.unwrap();
+    /// # };
+    /// ```
+    ///
+    /// # Errors
+    ///
     /// * [`std::io::Error`] if failure when killing the process.
     ///
     /// [`std::io::Error`]: std::io::Error
     pub async fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
         match self.0.take().unwrap().shutdown().await {
             Ok(status) => Ok(status),
-            Err(crate::UnixIoError::Io(err)) => Err(err),
-            Err(crate::UnixIoError::Unix(err)) => match err.as_errno() {
+            Err(super::UnixIoError::Io(err)) => Err(err),
+            Err(super::UnixIoError::Unix(err)) => match err.as_errno() {
                 Some(errno) => Err(std::io::Error::from_raw_os_error(errno as i32)),
                 None => Err(std::io::ErrorKind::Other.into()),
             },
@@ -249,7 +470,7 @@ impl Process {
     }
 }
 
-impl std::ops::Drop for Process {
+impl std::ops::Drop for Simplex {
     fn drop(&mut self) {
         if self.0.is_some() {
             tokio::spawn(self.0.take().unwrap().shutdown());
@@ -257,50 +478,111 @@ impl std::ops::Drop for Process {
     }
 }
 
-impl tokio::io::AsyncWrite for Process {
+impl tokio::io::AsyncWrite for Simplex {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        ctx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_write(cx, buf)
+        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_write(ctx, buf)
     }
 
     fn poll_flush(
         mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        ctx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_flush(cx)
+        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_flush(ctx)
     }
 
     fn poll_shutdown(
         mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
+        ctx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_shutdown(cx)
+        std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdin).poll_shutdown(ctx)
     }
 }
 
-impl tokio::io::AsyncRead for Process {
+/// A readable handle for both the stdout and stderr of the child process.
+pub struct Output {
+    read_source: ReadSource,
+    stdout: tokio::process::ChildStdout,
+    stderr: tokio::process::ChildStderr,
+}
+
+impl Output {
+    /// Choose which pipe to read form next.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::AsyncReadExt;
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    /// use pwner::tokio::ReadSource;
+    ///
+    /// let (process, mut output) = Command::new("ls").spawn_owned().unwrap().decompose();
+    /// let mut buffer = [0_u8; 1024];
+    /// output.read_from(ReadSource::Stdout).read(&mut buffer).await.unwrap();
+    /// # };
+    /// ```
+    pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
+        self.read_source = read_source;
+        self
+    }
+
+    /// Decomposes the handle into mutable references to the pipes.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use tokio::io::AsyncReadExt;
+    /// use tokio::process::Command;
+    /// use pwner::Spawner;
+    ///
+    /// let (process, mut output) = Command::new("ls").spawn_owned().unwrap().decompose();
+    /// let mut buffer = [0_u8; 1024];
+    /// let (stdout, stderr) = output.pipes();
+    ///
+    /// stdout.read(&mut buffer).await.unwrap();
+    /// # };
+    /// ```
+    pub fn pipes(
+        &mut self,
+    ) -> (
+        &mut tokio::process::ChildStdout,
+        &mut tokio::process::ChildStderr,
+    ) {
+        (&mut self.stdout, &mut self.stderr)
+    }
+
+    /// Consumes this struct returning the containing pipes.
+    #[must_use]
+    pub fn eject(self) -> (tokio::process::ChildStdout, tokio::process::ChildStderr) {
+        (self.stdout, self.stderr)
+    }
+}
+
+impl tokio::io::AsyncRead for Output {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut tokio::io::ReadBuf<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        match self.1 {
-            ReadSource::Stdout => {
-                std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdout).poll_read(cx, buf)
-            }
-            ReadSource::Stderr => {
-                std::pin::Pin::new(&mut self.0.as_mut().unwrap().stderr).poll_read(cx, buf)
-            }
+        match self.read_source {
+            ReadSource::Stdout => std::pin::Pin::new(&mut self.stdout).poll_read(cx, buf),
+            ReadSource::Stderr => std::pin::Pin::new(&mut self.stderr).poll_read(cx, buf),
             ReadSource::Both => {
-                let stderr =
-                    std::pin::Pin::new(&mut self.0.as_mut().unwrap().stderr).poll_read(cx, buf);
+                let stderr = std::pin::Pin::new(&mut self.stderr).poll_read(cx, buf);
                 if stderr.is_ready() {
                     stderr
                 } else {
-                    std::pin::Pin::new(&mut self.0.as_mut().unwrap().stdout).poll_read(cx, buf)
+                    std::pin::Pin::new(&mut self.stdout).poll_read(cx, buf)
                 }
             }
         }
@@ -310,8 +592,6 @@ impl tokio::io::AsyncRead for Process {
 struct ProcessImpl {
     process: tokio::process::Child,
     stdin: tokio::process::ChildStdin,
-    stdout: tokio::process::ChildStdout,
-    stderr: tokio::process::ChildStderr,
 }
 
 impl ProcessImpl {
@@ -331,12 +611,12 @@ impl ProcessImpl {
     }
 
     #[cfg(unix)]
-    async fn shutdown(mut self) -> Result<std::process::ExitStatus, crate::UnixIoError> {
+    async fn shutdown(mut self) -> Result<std::process::ExitStatus, super::UnixIoError> {
         // Copy the pid if the child has not exited yet
         let pid = match self.process.try_wait() {
             Ok(None) => self.pid().unwrap(),
             Ok(Some(status)) => return Ok(status),
-            Err(err) => return Err(crate::UnixIoError::from(err)),
+            Err(err) => return Err(super::UnixIoError::from(err)),
         };
 
         // Pin the process
@@ -374,7 +654,7 @@ impl ProcessImpl {
         }
 
         // Block until process is freed
-        process.wait().await.map_err(crate::UnixIoError::from)
+        process.wait().await.map_err(super::UnixIoError::from)
     }
 }
 
@@ -411,7 +691,8 @@ mod test {
 
     #[tokio::test]
     async fn test_drop_does_not_panic() {
-        let mut child = tokio::process::Command::new("ls").spawn_owned().unwrap();
+        let child = tokio::process::Command::new("ls").spawn_owned().unwrap();
+        let mut child = child.0;
         assert!(child.0.take().unwrap().shutdown().await.is_ok());
     }
 }
