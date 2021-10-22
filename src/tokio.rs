@@ -396,7 +396,11 @@ impl Simplex {
     /// ```
     #[must_use]
     pub fn id(&self) -> Option<u32> {
-        self.0.as_ref().unwrap().process.id()
+        self.0
+            .as_ref()
+            .unwrap_or_else(|| unreachable!())
+            .process
+            .id()
     }
 
     fn stdin(&mut self) -> &mut tokio::process::ChildStdin {
@@ -430,7 +434,7 @@ impl Simplex {
     /// ```
     #[must_use]
     pub fn eject(mut self) -> (tokio::process::Child, tokio::process::ChildStdin) {
-        let process = self.0.take().unwrap();
+        let process = self.0.take().unwrap_or_else(|| unreachable!());
         (process.process, process.stdin)
     }
 
@@ -459,7 +463,13 @@ impl Simplex {
     ///
     /// [`std::io::Error`]: std::io::Error
     pub async fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
-        match self.0.take().unwrap().shutdown().await {
+        match self
+            .0
+            .take()
+            .unwrap_or_else(|| unreachable!())
+            .shutdown()
+            .await
+        {
             Ok(status) => Ok(status),
             Err(super::UnixIoError::Io(err)) => Err(err),
             Err(super::UnixIoError::Unix(err)) => match err.as_errno() {

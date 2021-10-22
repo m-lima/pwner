@@ -303,7 +303,11 @@ impl Simplex {
     /// ```
     #[must_use]
     pub fn id(&self) -> u32 {
-        self.0.as_ref().unwrap().process.id()
+        self.0
+            .as_ref()
+            .unwrap_or_else(|| unreachable!())
+            .process
+            .id()
     }
 
     fn stdin(&mut self) -> &mut std::process::ChildStdin {
@@ -335,7 +339,7 @@ impl Simplex {
     /// ```
     #[must_use]
     pub fn eject(mut self) -> (std::process::Child, std::process::ChildStdin) {
-        let process = self.0.take().unwrap();
+        let process = self.0.take().unwrap_or_else(|| unreachable!());
         (process.process, process.stdin)
     }
 }
@@ -344,7 +348,7 @@ impl std::ops::Drop for Simplex {
     fn drop(&mut self) {
         if self.0.is_some() {
             let process = self.0.take().unwrap();
-            let _ = process.shutdown();
+            drop(process.shutdown());
         }
     }
 }
