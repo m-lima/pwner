@@ -472,10 +472,9 @@ impl Simplex {
         {
             Ok(status) => Ok(status),
             Err(super::UnixIoError::Io(err)) => Err(err),
-            Err(super::UnixIoError::Unix(err)) => match err.as_errno() {
-                Some(errno) => Err(std::io::Error::from_raw_os_error(errno as i32)),
-                None => Err(std::io::ErrorKind::Other.into()),
-            },
+            Err(super::UnixIoError::Unix(err)) => {
+                Err(std::io::Error::from_raw_os_error(err as i32))
+            }
         }
     }
 }
