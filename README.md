@@ -65,4 +65,4 @@ use pwner::Spawner;
 When the owned process gets dropped, [`Process`][__link0] will try to kill it gracefully by sending a `SIGINT`. If the process still doesn’t die, a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
 
 
- [__link0]: https://docs.rs/pwner/0.1.7/pwner/trait.Process.html
+ [__link0]: https://docs.rs/pwner/0.1.8/pwner/trait.Process.html
