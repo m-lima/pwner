@@ -80,6 +80,8 @@ impl super::Spawner for std::process::Command {
             .stderr(std::process::Stdio::piped())
             .spawn()?;
 
+        // Panic:
+        // Because the pipes were set above, these will be present and `unwrap()` is safe
         let stdin = process.stdin.take().unwrap();
         let stdout = process.stdout.take().unwrap();
         let stderr = process.stderr.take().unwrap();
@@ -139,6 +141,52 @@ impl Duplex {
     pub fn read_from(&mut self, read_source: ReadSource) -> &mut Self {
         self.1.read_from(read_source);
         self
+    }
+
+    /// Waits for the child to exit completely, returning the status with which it exited, stdout,
+    /// and stderr.
+    ///
+    /// The stdin handle to the child process, if any, will be closed before waiting. This helps
+    /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
+    /// while the parent waits for the child to exit.
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`std::process::Child::wait()`]
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use pwner::Spawner;
+    /// use std::io::{BufReader, Read};
+    /// use std::process::Command;
+    ///
+    /// let child = Command::new("ls").spawn_owned().unwrap();
+    /// let (status, stdout, stderr) = child.wait().unwrap();
+    ///
+    /// let mut buffer = String::new();
+    /// if status.success() {
+    ///     let mut reader = BufReader::new(stdout);
+    ///     reader.read_to_string(&mut buffer).unwrap();
+    /// } else {
+    ///     let mut reader = BufReader::new(stderr);
+    ///     reader.read_to_string(&mut buffer).unwrap();
+    /// }
+    /// ```
+    pub fn wait(
+        self,
+    ) -> Result<
+        (
+            std::process::ExitStatus,
+            std::process::ChildStdout,
+            std::process::ChildStderr,
+        ),
+        std::io::Error,
+    > {
+        let (mut child, _, stdout, stderr) = self.eject();
+        child.wait().map(|status| (status, stdout, stderr))
     }
 
     /// Decomposes the handle into mutable references to the pipes.
@@ -311,7 +359,48 @@ impl Simplex {
     }
 
     fn stdin(&mut self) -> &mut std::process::ChildStdin {
+        // Panic:
+        // The `Option` will only be missing at the `Drop` site. While the instance is alive, it
+        // will always be present
         &mut self.0.as_mut().unwrap().stdin
+    }
+
+    /// Waits for the child to exit completely, returning the status with which it exited.
+    ///
+    /// The stdin handle to the child process, if any, will be closed before waiting. This helps
+    /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
+    /// while the parent waits for the child to exit.
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`std::process::Child::wait()`]
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// use pwner::{process::ReadSource, Spawner};
+    /// use std::io::{BufReader, Read, Write};
+    /// use std::process::Command;
+    ///
+    /// let (mut child, mut output) = Command::new("cat").spawn_owned().unwrap().decompose();
+    ///
+    /// child.write_all(b"Hello\n").unwrap();
+    /// let status = child.wait().unwrap();
+    ///
+    /// let mut buffer = String::new();
+    /// if status.success() {
+    ///     output.read_from(ReadSource::Stdout);
+    /// } else {
+    ///     output.read_from(ReadSource::Stderr);
+    /// }
+    /// let mut reader = BufReader::new(output);
+    /// reader.read_to_string(&mut buffer).unwrap();
+    /// ```
+    pub fn wait(self) -> Result<std::process::ExitStatus, std::io::Error> {
+        let (mut child, _) = self.eject();
+        child.wait()
     }
 
     /// Completely releases the ownership of the child process. The raw underlying process and
@@ -346,8 +435,7 @@ impl Simplex {
 
 impl std::ops::Drop for Simplex {
     fn drop(&mut self) {
-        if self.0.is_some() {
-            let process = self.0.take().unwrap();
+        if let Some(process) = self.0.take() {
             drop(process.shutdown());
         }
     }
@@ -355,10 +443,16 @@ impl std::ops::Drop for Simplex {
 
 impl std::io::Write for Simplex {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        // Panic:
+        // The `Option` will only be missing at the `Drop` site. While the instance is alive, it
+        // will always be present
         self.0.as_mut().unwrap().stdin.write(buf)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
+        // Panic:
+        // The `Option` will only be missing at the `Drop` site. While the instance is alive, it
+        // will always be present
         self.0.as_mut().unwrap().stdin.flush()
     }
 }
@@ -548,6 +642,6 @@ mod test {
     fn drop() {
         let child = std::process::Command::new("ls").spawn_owned().unwrap();
         let mut simplex = child.0;
-        assert!(!simplex.0.take().unwrap().shutdown().is_ok());
+        assert!(simplex.0.take().unwrap().shutdown().is_err());
     }
 }

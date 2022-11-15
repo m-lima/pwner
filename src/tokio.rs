@@ -181,6 +181,54 @@ impl Duplex {
         self
     }
 
+    /// Waits for the child to exit completely, returning the status with which it exited, stdout,
+    /// and stderr.
+    ///
+    /// The stdin handle to the child process, if any, will be closed before waiting. This helps
+    /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
+    /// while the parent waits for the child to exit.
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`tokio::process::Child::wait()`]
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use pwner::Spawner;
+    /// use tokio::io::{AsyncReadExt, BufReader};
+    /// use tokio::process::Command;
+    ///
+    /// let child = Command::new("ls").spawn_owned().unwrap();
+    /// let (status, stdout, stderr) = child.wait().await.unwrap();
+    ///
+    /// let mut buffer = String::new();
+    /// if status.success() {
+    ///     let mut reader = BufReader::new(stdout);
+    ///     reader.read_to_string(&mut buffer).await.unwrap();
+    /// } else {
+    ///     let mut reader = BufReader::new(stderr);
+    ///     reader.read_to_string(&mut buffer).await.unwrap();
+    /// }
+    /// # };
+    /// ```
+    pub async fn wait(
+        self,
+    ) -> Result<
+        (
+            std::process::ExitStatus,
+            tokio::process::ChildStdout,
+            tokio::process::ChildStderr,
+        ),
+        std::io::Error,
+    > {
+        let (mut child, _, stdout, stderr) = self.eject();
+        child.wait().await.map(|status| (status, stdout, stderr))
+    }
+
     /// Decomposes the handle into mutable references to the pipes.
     ///
     /// # Examples
@@ -405,6 +453,46 @@ impl Simplex {
 
     fn stdin(&mut self) -> &mut tokio::process::ChildStdin {
         &mut self.0.as_mut().unwrap().stdin
+    }
+
+    /// Waits for the child to exit completely, returning the status with which it exited.
+    ///
+    /// The stdin handle to the child process, if any, will be closed before waiting. This helps
+    /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
+    /// while the parent waits for the child to exit.
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`tokio::process::Child::wait()`]
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    /// ```no_run
+    /// # async {
+    /// use pwner::{tokio::ReadSource, Spawner};
+    /// use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
+    /// use tokio::process::Command;
+    ///
+    /// let (mut child, mut output) = Command::new("cat").spawn_owned().unwrap().decompose();
+    ///
+    /// child.write_all(b"Hello\n").await.unwrap();
+    /// let status = child.wait().await.unwrap();
+    ///
+    /// let mut buffer = String::new();
+    /// if status.success() {
+    ///     output.read_from(ReadSource::Stdout);
+    /// } else {
+    ///     output.read_from(ReadSource::Stderr);
+    /// }
+    /// let mut reader = BufReader::new(output);
+    /// reader.read_to_string(&mut buffer).await.unwrap();
+    /// # };
+    /// ```
+    pub async fn wait(self) -> Result<std::process::ExitStatus, std::io::Error> {
+        let (mut child, _) = self.eject();
+        child.wait().await
     }
 
     /// Completely releases the ownership of the child process. The raw underlying process and
