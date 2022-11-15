@@ -56,6 +56,6 @@ use pwner::Spawner;
 
 **Note:** Only available on *nix platforms.
 
-When the owned process gets dropped, `Process` will try to
-kill it gracefully by sending a `SIGINT`. If the process still doesn't die,
-a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
+When the owned process gets dropped, `Process` will try to kill it gracefully by
+sending a `SIGINT`. If the process still doesn't die, a `SIGTERM` is sent and
+another chance is given, until finally a `SIGKILL` is sent.

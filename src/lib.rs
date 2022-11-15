@@ -56,9 +56,9 @@
 //!
 //! **Note:** Only available on *nix platforms.
 //!
-//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
-//! kill it gracefully by sending a `SIGINT`. If the process still doesn't die,
-//! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
+//! When the owned process gets dropped, [`Process`] will try to kill it gracefully by sending a
+//! `SIGINT`. If the process still doesn't die, a `SIGTERM` is sent and another chance is given,
+//! until finally a `SIGKILL` is sent.
 pub mod process;
 #[cfg(feature = "tokio")]
 pub mod tokio;
@@ -68,8 +68,7 @@ pub mod tokio;
 ///
 /// The handle also implements a clean shutdown of the process upon destruction.
 pub trait Spawner {
-    /// The [`Process`](trait.Process.html) implementation output by
-    /// [`spawn_owned()`](#tymethod.spawn_owned)
+    /// The [`Process`] implementation output by [`Self::spawn_owned()`]
     type Output: Process;
 
     /// Executes the command as a child process, returning a handle to it.
@@ -97,10 +96,9 @@ pub trait Spawner {
     fn spawn_owned(&mut self) -> std::io::Result<Self::Output>;
 }
 
-/// The trait returned by [`Spawner::spawn_owned()`](trait.Spawner.html#tymethod.spawn_owned).
+/// The trait returned by [`Spawner::spawn_owned()`].
 ///
-/// All implementations of [`Spawner`](trait.Spawner.html) must return a concrete instance capable
-/// of read/write.
+/// All implementations of [`Spawner`] must return a concrete instance capable of read/write.
 pub trait Process {}
 
 #[cfg(unix)]

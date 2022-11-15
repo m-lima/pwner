@@ -50,10 +50,10 @@
 //!
 //! **Note:** Only available on *nix platforms.
 //!
-//! When the owned process gets dropped, [`Process`](trait.Process.html) will try to
-//! kill it gracefully by sending a `SIGINT` and asynchronously wait for the process to die for 2
-//! seconds. If the process still doesn't die, a `SIGTERM` is sent and another chance is given,
-//! until finally a `SIGKILL` is sent.
+//! When the owned process gets dropped, [`Process`](crate::Process) will try to kill it gracefully
+//! by sending a `SIGINT` and asynchronously wait for the process to die for 2 seconds. If the
+//! process still doesn't die, a `SIGTERM` is sent and another chance is given, until finally a
+//! `SIGKILL` is sent.
 //!
 //! ## Panics
 //!
@@ -91,8 +91,7 @@ pub enum ReadSource {
     Both,
 }
 
-/// An implementation of [`Process`](../trait.Process.html) that uses
-/// [`tokio::process`](tokio::process) as the launcher.
+/// An implementation of [`Process`](crate::Process) that uses [`tokio::process`] as the launcher.
 ///
 /// All read and write operations are async.
 ///
@@ -260,7 +259,7 @@ impl Duplex {
     }
 
     /// Separates the process and its input from the output pipes. Ownership is retained by a
-    /// [`Simplex`](struct.Simplex.html) which still implements a graceful drop of the child process.
+    /// [`Simplex`] which still implements a graceful drop of the child process.
     ///
     /// # Examples
     ///
@@ -354,7 +353,7 @@ impl Duplex {
     ///
     /// # Errors
     ///
-    /// * [`std::io::Error`](std::io::Error) if failure when killing the process.
+    /// * [`std::io::Error`] if failure when killing the process.
     pub async fn shutdown(self) -> std::io::Result<std::process::ExitStatus> {
         self.0.shutdown().await
     }
@@ -394,7 +393,7 @@ impl tokio::io::AsyncRead for Duplex {
     }
 }
 
-/// An implementation of [`Process`](../trait.Process.html) that is stripped from any output
+/// An implementation of [`Process`](crate::Process) that is stripped from any output
 /// pipes.
 ///
 /// All write operations are async.

@@ -47,10 +47,10 @@
 //!
 //! **Note:** Only available on *nix platforms.
 //!
-//! When the owned process gets dropped, [`Process`](../trait.Process.html) will try to
-//! kill it gracefully by sending a `SIGINT` and checking, without blocking, if the child has diesd.
-//! If the child is still running, it will block for 2seconds. If the process still doesn't die,
-//! a `SIGTERM` is sent and another chance is given, until finally a `SIGKILL` is sent.
+//! When the owned process gets dropped, [`Process`](crate::Process) will try to kill it gracefully
+//! by sending a `SIGINT` and checking, without blocking, if the child has diesd. If the child is
+//! still running, it will block for 2seconds. If the process still doesn't die, a `SIGTERM` is
+//! sent and another chance is given, until finally a `SIGKILL` is sent.
 
 /// Possible sources to read from
 #[derive(Debug, Copy, Clone)]
@@ -61,7 +61,7 @@ pub enum ReadSource {
     Stderr,
 }
 
-/// An implementation of [`Process`](../trait.Process.html) that uses [`std::process`](std::process)
+/// An implementation of [`Process`](crate::Process) that uses [`std::process`]
 /// as the launcher.
 ///
 /// All read and write operations are sync.
@@ -218,7 +218,7 @@ impl Duplex {
     }
 
     /// Separates the process and its input from the output pipes. Ownership is retained by a
-    /// [`Simplex`](struct.Simplex.html) which still implements a graceful drop of the child process.
+    /// [`Simplex`] which still implements a graceful drop of the child process.
     ///
     /// # Examples
     ///
@@ -304,7 +304,7 @@ impl std::io::Read for Duplex {
     }
 }
 
-/// An implementation of [`Process`](../trait.Process.html) that is stripped from any output
+/// An implementation of [`Process`](crate::Process) that is stripped from any output
 /// pipes.
 ///
 /// All write operations are sync.
