@@ -1,8 +1,11 @@
 # {{crate}}
-[![Github](https://github.com/m-lima/pwner/workflows/build/badge.svg)](https://github.com/m-lima/pwner/actions?workflow=build)
+[![Github]({{ repository }}/workflows/build/badge.svg)]({{ repository }}/actions?workflow=build)
 [![MIT licensed](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Cargo](https://img.shields.io/crates/v/pwner.svg)](
-https://crates.io/crates/pwner)
-[![Documentation](https://docs.rs/pwner/badge.svg)](https://docs.rs/pwner)
+[![Cargo](https://img.shields.io/crates/v/{{ crate | urlencode }}.svg)](https://crates.io/crates/{{ crate | urlencode }})
+[![Documentation](https://docs.rs/{{ crate | urlencode }}/badge.svg)](https://docs.rs/{{ crate | urlencode }})
 
 {{readme}}
+
+{%- if links != "" %}
+{{ links }}
+{%- endif -%}
