@@ -150,10 +150,6 @@ impl Duplex {
     /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
     /// while the parent waits for the child to exit.
     ///
-    /// # Errors
-    ///
-    /// Relays the error from [`std::process::Child::wait()`]
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -175,6 +171,10 @@ impl Duplex {
     ///     reader.read_to_string(&mut buffer).unwrap();
     /// }
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`std::process::Child::wait()`]
     pub fn wait(
         self,
     ) -> Result<
@@ -371,10 +371,6 @@ impl Simplex {
     /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
     /// while the parent waits for the child to exit.
     ///
-    /// # Errors
-    ///
-    /// Relays the error from [`std::process::Child::wait()`]
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -398,6 +394,10 @@ impl Simplex {
     /// let mut reader = BufReader::new(output);
     /// reader.read_to_string(&mut buffer).unwrap();
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`std::process::Child::wait()`]
     pub fn wait(self) -> Result<std::process::ExitStatus, std::io::Error> {
         let (mut child, _) = self.eject();
         child.wait()

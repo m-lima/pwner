@@ -187,10 +187,6 @@ impl Duplex {
     /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
     /// while the parent waits for the child to exit.
     ///
-    /// # Errors
-    ///
-    /// Relays the error from [`tokio::process::Child::wait()`]
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -214,6 +210,10 @@ impl Duplex {
     /// }
     /// # };
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`tokio::process::Child::wait()`]
     pub async fn wait(
         self,
     ) -> Result<
@@ -460,10 +460,6 @@ impl Simplex {
     /// avoid deadlock: it ensures that the child does not block waiting for input from the parent,
     /// while the parent waits for the child to exit.
     ///
-    /// # Errors
-    ///
-    /// Relays the error from [`tokio::process::Child::wait()`]
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -489,6 +485,10 @@ impl Simplex {
     /// reader.read_to_string(&mut buffer).await.unwrap();
     /// # };
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// Relays the error from [`tokio::process::Child::wait()`]
     pub async fn wait(self) -> Result<std::process::ExitStatus, std::io::Error> {
         let (mut child, _) = self.eject();
         child.wait().await
@@ -546,9 +546,7 @@ impl Simplex {
     ///
     /// # Errors
     ///
-    /// * [`std::io::Error`] if failure when killing the process.
-    ///
-    /// [`std::io::Error`]: std::io::Error
+    /// If failure when killing the process.
     pub async fn shutdown(mut self) -> std::io::Result<std::process::ExitStatus> {
         match self
             .0
